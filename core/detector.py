@@ -20,12 +20,13 @@ except ImportError:
     EASYOCR_AVAILABLE = False
 
 
-def enhance_for_ocr(img_bgr: np.ndarray, clip_limit: float = 3.0, tile_size: int = 8) -> np.ndarray:
-    """Enhance low-contrast and semi-transparent watermarks using CLAHE in LAB space."""
+def enhance_for_ocr(img_bgr: np.ndarray, clip_limit: float = 10.0, tile_size: int = 4) -> np.ndarray:
+    """Enhance low-contrast and semi-transparent watermarks using multi-scale CLAHE in LAB space."""
     lab = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2LAB)
     l, a, b = cv2.split(lab)
-    clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=(tile_size, tile_size))
-    cl = clahe.apply(l)
+    clahe_standard = cv2.createCLAHE(clipLimit=4.0, tileGridSize=(8, 8))
+    clahe_ultra = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=(tile_size, tile_size))
+    cl = cv2.addWeighted(clahe_standard.apply(l), 0.4, clahe_ultra.apply(l), 0.6, 0)
     enhanced = cv2.merge((cl, a, b))
     return cv2.cvtColor(enhanced, cv2.COLOR_LAB2BGR)
 
@@ -175,7 +176,7 @@ class WatermarkDetector:
         self.languages = languages or ['ch_sim', 'en']
         self.use_gpu = use_gpu
         self._reader = None
-        self.default_wm_keywords = ['rfans', 'channel', 'bot', 'tg', 'album', '电', '报', '群', '搜', '索', '@', 't.me']
+        self.default_wm_keywords = ['rfans', 'channel', 'bot', 'tg', 'album', '电', '报', '群', '搜', '索', '@', 't.me', 'fans', 'vip']
         self.stamp_keywords = ['channel', 'album', 'bot', 'rfans', 'group']
 
     @property
@@ -219,7 +220,7 @@ class WatermarkDetector:
             img_enhanced = enhance_for_ocr(img_bgr)
             try:
                 res_normal = self.reader.readtext(img_bgr, contrast_ths=0.05, adjust_contrast=0.7)
-                res_enhanced = self.reader.readtext(img_enhanced, contrast_ths=0.03, text_threshold=0.4, low_text=0.2)
+                res_enhanced = self.reader.readtext(img_enhanced, contrast_ths=0.02, text_threshold=0.25, low_text=0.15)
                 all_results = res_normal + res_enhanced
                 
                 for (bbox, text, prob) in all_results:

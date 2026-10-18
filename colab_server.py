@@ -14,24 +14,32 @@ import cv2
 import numpy as np
 from PIL import Image
 from flask import Flask, request, jsonify
-from flask_cors import CORS
 from simple_lama_inpainting import SimpleLama
-import easyocr
 
+# 1. Cek Ketersediaan GPU CUDA
 print("=" * 65)
 if torch.cuda.is_available():
     print(f"🚀 CUDA GPU Aktif: {torch.cuda.get_device_name(0)}")
-    print(f"⚡ VRAM: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB")
+    print(f"⚡ VRAM Tersedia: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB")
     USE_GPU = True
 else:
-    print("⚠️ PERINGATAN: GPU tidak aktif. Ubah Runtime -> T4 GPU!")
+    print("⚠️ PERINGATAN: GPU tidak terdeteksi! Pastikan Anda memilih Runtime -> T4 GPU di Colab.")
     USE_GPU = False
 print("=" * 65)
 
-print("[*] Memuat model AI ke GPU...")
-reader = easyocr.Reader(['ch_sim', 'en'], gpu=USE_GPU)
+# 2. Inisialisasi Model Inpainting LaMa (Utama untuk menghapus watermark)
+print("[*] Memuat model Inpainting LaMa ke GPU...")
 lama = SimpleLama()
-print("✅ EasyOCR & SimpleLaMa berhasil dimuat ke GPU!")
+print("✅ SimpleLaMa Inpainting berhasil dimuat ke GPU!")
+
+# 3. EasyOCR (Opsional untuk deteksi teks - jika modul bidi belum ada, server tetap jalan 100%)
+reader = None
+try:
+    import easyocr
+    reader = easyocr.Reader(['ch_sim', 'en'], gpu=USE_GPU)
+    print("✅ EasyOCR berhasil dimuat ke GPU!")
+except Exception as e:
+    print(f"ℹ️ EasyOCR belum aktif ({e}). Server LaMa Inpainting GPU tetap jalan 100%!")
 
 app = Flask(__name__)
 CORS(app)
@@ -51,10 +59,13 @@ def base64_to_bgr(b64_str):
     return cv2.imdecode(np.frombuffer(base64.b64decode(b64_str), np.uint8), cv2.IMREAD_COLOR)
 
 def enhance_for_ocr(img_bgr):
+    """Multi-scale CLAHE untuk memunculkan teks transparan paling tipis/gelap"""
     lab = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2LAB)
     l, a, b = cv2.split(lab)
-    cl = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8)).apply(l)
-    return cv2.cvtColor(cv2.merge((cl, a, b)), cv2.COLOR_LAB2BGR)
+    clahe_standard = cv2.createCLAHE(clipLimit=4.0, tileGridSize=(8, 8))
+    clahe_ultra = cv2.createCLAHE(clipLimit=12.0, tileGridSize=(4, 4))
+    l_enh = cv2.addWeighted(clahe_standard.apply(l), 0.4, clahe_ultra.apply(l), 0.6, 0)
+    return cv2.cvtColor(cv2.merge((l_enh, a, b)), cv2.COLOR_LAB2BGR)
 
 def cluster_stamps(candidate_boxes, max_distance=100):
     clusters = []
@@ -84,21 +95,23 @@ def api_detect():
     img = base64_to_bgr(data['image'])
     h, w = img.shape[:2]
     mask = np.zeros((h, w), dtype=np.uint8)
-    wm_keywords = ['rfans', 'channel', 'bot', 'tg', 'album', '电', '报', '群', '搜', '索', '@']
+    wm_keywords = ['rfans', 'channel', 'bot', 'tg', 'album', '电', '报', '群', '搜', '索', '@', 'fans', 't.me', 'vip']
     stamp_keywords = ['channel', 'album', 'bot', 'rfans']
     stamp_candidates = []
 
-    res_normal = reader.readtext(img, contrast_ths=0.05, adjust_contrast=0.7)
-    res_enhanced = reader.readtext(enhance_for_ocr(img), contrast_ths=0.03, text_threshold=0.4, low_text=0.2)
-    for (bbox, text, prob) in (res_normal + res_enhanced):
-        t_low = text.lower().replace(' ', '')
-        if any(k in t_low for k in wm_keywords):
-            pts = np.array(bbox, dtype=np.int32)
-            cv2.fillPoly(mask, [pts], 255)
-            bx, by = int(np.min(pts[:, 0])), int(np.min(pts[:, 1]))
-            bw, bh = int(np.max(pts[:, 0]) - bx), int(np.max(pts[:, 1]) - by)
-            if any(sk in t_low for sk in stamp_keywords) or bw > w * 0.08:
-                stamp_candidates.append((bx, by, bw, bh))
+    if reader:
+        res_normal = reader.readtext(img, contrast_ths=0.05, adjust_contrast=0.7)
+        res_enhanced = reader.readtext(enhance_for_ocr(img), contrast_ths=0.02, text_threshold=0.25, low_text=0.15)
+        all_res = res_normal + res_enhanced
+        for (bbox, text, prob) in all_res:
+            t_low = text.lower().replace(' ', '')
+            if any(k in t_low for k in wm_keywords):
+                pts = np.array(bbox, dtype=np.int32)
+                cv2.fillPoly(mask, [pts], 255)
+                bx, by = int(np.min(pts[:, 0])), int(np.min(pts[:, 1]))
+                bw, bh = int(np.max(pts[:, 0]) - bx), int(np.max(pts[:, 1]) - by)
+                if any(sk in t_low for sk in stamp_keywords) or bw > w * 0.08:
+                    stamp_candidates.append((bx, by, bw, bh))
 
     if stamp_candidates:
         clusters = cluster_stamps(stamp_candidates, max_distance=int(min(h, w) * 0.20))
