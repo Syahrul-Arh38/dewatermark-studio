@@ -119,8 +119,26 @@ def api_detect():
             pts = []
             for (bx, by, bw, bh) in cluster:
                 pts.extend([[bx, by], [bx + bw, by], [bx + bw, by + bh], [bx, by + bh]])
-            (cx, cy), radius = cv2.minEnclosingCircle(np.array(pts, dtype=np.float32))
-            cv2.circle(mask, (int(cx), int(cy)), int(radius * 1.25), 255, -1)
+            cx, cy = int(cx), int(cy)
+            r = int(radius * 1.15)
+            y1, y2 = max(0, cy - r), min(h, cy + r)
+            x1, x2 = max(0, cx - r), min(w, cx + r)
+            roi = img[y1:y2, x1:x2]
+            if roi.size > 0:
+                gray_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+                c_mask = np.zeros((y2 - y1, x2 - x1), dtype=np.uint8)
+                cv2.circle(c_mask, (cx - x1, cy - y1), r, 255, -1)
+                
+                k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+                tophat = cv2.morphologyEx(gray_roi, cv2.MORPH_TOPHAT, k)
+                _, strk = cv2.threshold(tophat, 15, 255, cv2.THRESH_BINARY)
+                _, brt = cv2.threshold(gray_roi, 205, 255, cv2.THRESH_BINARY)
+                strk = cv2.bitwise_or(strk, brt)
+                cv2.circle(strk, (cx - x1, cy - y1), r, 255, 3) # cincin lingkar luar tipis
+                strk = cv2.bitwise_and(strk, c_mask)
+                k_dil = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+                strk = cv2.dilate(strk, k_dil, iterations=1)
+                mask[y1:y2, x1:x2] = cv2.bitwise_or(mask[y1:y2, x1:x2], strk)
 
     dilation_px = int(data.get('dilation_px', 9))
     if dilation_px > 0:

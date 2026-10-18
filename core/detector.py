@@ -104,9 +104,34 @@ def detect_stamps_and_geometry(
         radius = np.clip(radius, min_allowed_radius, max_allowed_radius)
         
         cx, cy = int(center_x), int(center_y)
-        cv2.circle(mask, (cx, cy), int(radius), 255, -1)
+        r = int(radius)
         
-    return mask
+        # Batasi ke ROI lingkaran stempel
+        y1, y2 = max(0, cy - r), min(h, cy + r)
+        x1, x2 = max(0, cx - r), min(w, cx + r)
+        
+        roi_img = img_bgr[y1:y2, x1:x2]
+        if roi_img.size > 0:
+            gray_roi = cv2.cvtColor(roi_img, cv2.COLOR_BGR2GRAY)
+            circle_roi_mask = np.zeros((y2 - y1, x2 - x1), dtype=np.uint8)
+            cv2.circle(circle_roi_mask, (cx - x1, cy - y1), r, 255, -1)
+            
+            # Stroke-level extraction (hanya ambil guratan tinta putih & garis lingkaran)
+            k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+            tophat = cv2.morphologyEx(gray_roi, cv2.MORPH_TOPHAT, k)
+            _, stroke = cv2.threshold(tophat, 15, 255, cv2.THRESH_BINARY)
+            _, bright = cv2.threshold(gray_roi, 205, 255, cv2.THRESH_BINARY)
+            stroke = cv2.bitwise_or(stroke, bright)
+            
+            # Garis tepi lingkaran luar stempel (hanya setebal 3px, bukan solid!)
+            cv2.circle(stroke, (cx - x1, cy - y1), r, 255, 3)
+            stroke = cv2.bitwise_and(stroke, circle_roi_mask)
+            
+            # Dilasi halus 2-3px agar tidak merusak background
+            k_dil = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+            stroke = cv2.dilate(stroke, k_dil, iterations=1)
+            
+            mask[y1:y2, x1:x2] = cv2.bitwise_or(mask[y1:y2, x1:x2], stroke)
 
 
 def detect_watermark_strokes(
