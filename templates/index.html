@@ -92,10 +92,11 @@
 
           <div class="control-group">
             <div class="label-row">
-              <label for="dilationPx">Dilation Expansion</label>
-              <span id="dilationVal" class="val-badge">9px</span>
+              <label for="dilationPx">Stroke Dilation</label>
+              <span id="dilationVal" class="val-badge">2px</span>
             </div>
-            <input type="range" id="dilationPx" min="1" max="25" step="2" value="9">
+            <input type="range" id="dilationPx" min="1" max="11" step="1" value="2">
+            <small style="color: var(--text-muted); font-size: 0.72rem; display: block; margin-top: 4px;">Presisi 1-2px menjaga tekstur tembok & latar agar tidak belepotan.</small>
           </div>
 
           <div class="toggle-group">
@@ -251,10 +252,53 @@
           <!-- Custom Brush Cursor -->
           <div id="brushCursor" class="brush-cursor"></div>
 
-          <!-- Processing Overlay Loader -->
+          <!-- Interactive Real-Time Progress Overlay -->
           <div id="processingOverlay" class="processing-overlay" style="display: none;">
-            <div class="spinner"></div>
-            <p id="processingText">AI is scanning and inpainting watermark...</p>
+            <div class="progress-modal-card">
+              <div class="progress-card-header">
+                <div class="pulse-indicator">
+                  <span class="pulse-dot"></span>
+                  <span class="pulse-text" id="engineStatusText">Live GPU Activity</span>
+                </div>
+                <div class="progress-timer-badge">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  <span id="progressTimer">0.0s</span>
+                </div>
+              </div>
+
+              <div class="progress-main-info">
+                <h3 id="progressTitle">Inpainting Watermark...</h3>
+                <span class="progress-percent" id="progressPercent">0%</span>
+              </div>
+
+              <div class="progress-bar-container">
+                <div class="progress-bar-fill" id="progressBarFill" style="width: 0%;">
+                  <div class="progress-bar-glow"></div>
+                </div>
+              </div>
+
+              <p class="progress-detail" id="progressDetail">Preparing neural pipeline & mask coordinates...</p>
+
+              <!-- Real-time Step Tracker -->
+              <div class="progress-step-list" id="progressStepList">
+                <div class="step-item" id="stepItem0">
+                  <span class="step-icon">1</span>
+                  <span class="step-label">Mask Setup</span>
+                </div>
+                <div class="step-item" id="stepItem1">
+                  <span class="step-icon">2</span>
+                  <span class="step-label">Neural Inpainting</span>
+                </div>
+                <div class="step-item" id="stepItem2">
+                  <span class="step-icon">3</span>
+                  <span class="step-label">Texture Blending</span>
+                </div>
+                <div class="step-item" id="stepItem3">
+                  <span class="step-icon">4</span>
+                  <span class="step-label">Render</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>

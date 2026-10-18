@@ -25,7 +25,7 @@ class WatermarkPipeline:
         use_ocr: bool = True,
         use_heuristics: bool = True,
         sensitivity: float = 0.5,
-        dilation_px: int = 9,
+        dilation_px: int = 2,
         inpaint_method: str = "auto",
         feather_edges: bool = True
     ) -> Dict[str, Any]:

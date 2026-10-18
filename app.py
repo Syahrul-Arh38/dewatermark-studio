@@ -91,7 +91,7 @@ def api_detect():
 
     img_bgr = base64_to_bgr(image_b64)
     sensitivity = float(data.get('sensitivity', 0.5))
-    dilation_px = int(data.get('dilation_px', 9))
+    dilation_px = int(data.get('dilation_px', 2))
     use_ocr = bool(data.get('use_ocr', True))
     use_heuristics = bool(data.get('use_heuristics', True))
 
@@ -222,12 +222,14 @@ def download_batch_zip(batch_id):
                 zip_file.write(file_path, arcname=file)
 
     zip_buffer.seek(0)
-    return send_file(
-        zip_buffer,
-        mimetype='application/zip',
-        as_attachment=True,
-        download_name=f"{batch_id}.zip"
-    )
+    data = zip_buffer.getvalue()
+    from flask import Response
+    resp = Response(data, mimetype='application/zip')
+    resp.headers['Content-Disposition'] = f'attachment; filename="{batch_id}.zip"'
+    resp.headers['Content-Length'] = str(len(data))
+    resp.headers['Accept-Ranges'] = 'none'
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return resp
 
 
 if __name__ == '__main__':

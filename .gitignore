@@ -15,8 +15,18 @@ uploads/*
 !uploads/.gitkeep
 output/*
 !output/.gitkeep
+# Models & weights
 models/*.onnx
 models/*.pt
+*.pt
+runs/
+
+# Temporary test outputs & scratch
+scratch/
+samples/*
+!samples/.gitkeep
+!samples/demo_sample.jpg
+!samples/watermark_sample.jpg
 
 # OS specific
 .DS_Store

@@ -60,6 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnTestColab = document.getElementById('btnTestColab');
   const gpuStatusBadge = document.getElementById('gpuStatusBadge');
   let apiBaseUrl = '';
+  let isUsingColab = false;
 
   // View modes
   const modeSplit = document.getElementById('modeSplit');
@@ -179,10 +180,12 @@ document.addEventListener('DOMContentLoaded', () => {
   function updateApiBaseUrl() {
     if (checkRemoteGpu.checked && colabUrlInput.value.trim()) {
       apiBaseUrl = colabUrlInput.value.trim().replace(/\/+$/, '');
+      isUsingColab = true;
       gpuStatusBadge.textContent = 'Colab GPU';
       gpuStatusBadge.className = 'gpu-badge badge-active';
     } else {
       apiBaseUrl = '';
+      isUsingColab = false;
       gpuStatusBadge.textContent = 'Local CPU';
       gpuStatusBadge.className = 'gpu-badge';
     }
@@ -467,7 +470,12 @@ document.addEventListener('DOMContentLoaded', () => {
   // ----------------------------------------------------
   async function autoScanWatermark() {
     if (!currentImage) return;
-    showLoading("AI is scanning watermarks & circular stamps...");
+    showLoading("AI Scanning Watermarks & Stamps...", [
+      "Dual CLAHE",
+      "Diagonal OCR",
+      "Transparent Sweep",
+      "Mask Overlay"
+    ]);
 
     try {
       const payload = {
@@ -478,11 +486,16 @@ document.addEventListener('DOMContentLoaded', () => {
         use_heuristics: true
       };
 
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 90000);
+
       const res = await fetch(`${apiBaseUrl}/api/detect`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
       const data = await res.json();
 
       if (data.status === 'ok') {
@@ -521,7 +534,11 @@ document.addEventListener('DOMContentLoaded', () => {
         hideLoading();
       }
     } catch (err) {
-      alert("Network error during detection: " + err);
+      if (err.name === 'AbortError') {
+        alert("Waktu proses melebihi batas waktu (Timeout). Pastikan Google Colab aktif dan link Cloudflare terhubung.");
+      } else {
+        alert("Network error during detection: " + err);
+      }
       hideLoading();
     }
   }
@@ -531,7 +548,12 @@ document.addEventListener('DOMContentLoaded', () => {
   // Inpaint Trigger
   btnInpaint.addEventListener('click', async () => {
     if (!currentImage) return;
-    showLoading("Inpainting watermark with selected engine...");
+    showLoading("Cleaning Watermark (Inpaint)...", [
+      "Mask Buffer",
+      isUsingColab ? "LaMa GPU Inpaint" : "Neural Inpaint",
+      "Texture Blending",
+      "Lossless Render"
+    ]);
 
     try {
       // Export current mask canvas as PNG base64
@@ -544,11 +566,16 @@ document.addEventListener('DOMContentLoaded', () => {
         feather: checkFeather.checked
       };
 
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
+
       const res = await fetch(`${apiBaseUrl}/api/inpaint`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
       const data = await res.json();
 
       if (data.status === 'ok') {
@@ -569,7 +596,11 @@ document.addEventListener('DOMContentLoaded', () => {
         hideLoading();
       }
     } catch (err) {
-      alert("Network error during inpaint: " + err);
+      if (err.name === 'AbortError') {
+        alert("Waktu inpainting melebihi batas (Timeout 60s). Silakan coba lagi.");
+      } else {
+        alert("Network error during inpainting: " + err);
+      }
       hideLoading();
     }
   });
@@ -649,17 +680,151 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  btnBatchDownloadAll.addEventListener('click', () => {
+  btnBatchDownloadAll.addEventListener('click', async () => {
     if (!currentBatchId) return;
-    window.location.href = `/api/download-batch/${currentBatchId}`;
+
+    const originalText = btnBatchDownloadAll.innerHTML;
+    btnBatchDownloadAll.innerHTML = `<span>⏳ Downloading ZIP...</span>`;
+    btnBatchDownloadAll.disabled = true;
+
+    try {
+      const downloadUrl = `${apiBaseUrl}/api/download-batch/${currentBatchId}`;
+      const response = await fetch(downloadUrl);
+      if (!response.ok) throw new Error("Gagal mengunduh ZIP dari server (" + response.status + ")");
+
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = `${currentBatchId}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      console.warn("Direct blob download notice, fallback to standard link:", err);
+      window.location.href = `${apiBaseUrl}/api/download-batch/${currentBatchId}`;
+    } finally {
+      btnBatchDownloadAll.innerHTML = originalText;
+      btnBatchDownloadAll.disabled = false;
+    }
   });
 
-  // Loading Indicator Helpers
-  function showLoading(text) {
-    processingText.textContent = text;
+  // ----------------------------------------------------
+  // Dynamic Real-Time Progress & Heartbeat Controller
+  // ----------------------------------------------------
+  const progressTitle = document.getElementById('progressTitle');
+  const progressDetail = document.getElementById('progressDetail');
+  const progressBarFill = document.getElementById('progressBarFill');
+  const progressPercent = document.getElementById('progressPercent');
+  const progressTimer = document.getElementById('progressTimer');
+  const engineStatusText = document.getElementById('engineStatusText');
+  const stepItems = [
+    document.getElementById('stepItem0'),
+    document.getElementById('stepItem1'),
+    document.getElementById('stepItem2'),
+    document.getElementById('stepItem3')
+  ];
+
+  let progressInterval = null;
+  let progressStartTime = 0;
+  let currentProgressVal = 0;
+
+  function showLoading(title = "Processing...", customSteps = null) {
+    if (progressInterval) clearInterval(progressInterval);
     processingOverlay.style.display = 'flex';
+    if (progressTitle) progressTitle.textContent = title;
+    if (progressBarFill) progressBarFill.style.width = '6%';
+    if (progressPercent) progressPercent.textContent = '6%';
+    currentProgressVal = 6;
+    progressStartTime = performance.now();
+    if (progressTimer) progressTimer.textContent = '0.0s';
+    if (engineStatusText) {
+      engineStatusText.textContent = isUsingColab ? "Colab GPU Active" : "Local Engine Active";
+    }
+
+    const defaultSteps = [
+      "Mask Buffer",
+      isUsingColab ? "LaMa GPU Inpaint" : "Neural Inpaint",
+      "Texture Blending",
+      "Render Output"
+    ];
+    const stepsToUse = customSteps || defaultSteps;
+
+    stepItems.forEach((item, idx) => {
+      if (item) {
+        const labelEl = item.querySelector('.step-label');
+        const iconEl = item.querySelector('.step-icon');
+        if (labelEl && stepsToUse[idx]) labelEl.textContent = stepsToUse[idx];
+        if (iconEl) iconEl.textContent = (idx + 1).toString();
+        item.className = 'step-item' + (idx === 0 ? ' active' : '');
+      }
+    });
+
+    updateStep(0, "Preparing neural pipeline & mask coordinates...");
+
+    // Real-time ticking progress & timer loop (100ms)
+    progressInterval = setInterval(() => {
+      const elapsedSec = (performance.now() - progressStartTime) / 1000;
+      if (progressTimer) progressTimer.textContent = `${elapsedSec.toFixed(1)}s`;
+
+      // Smooth progress curve
+      if (currentProgressVal < 92) {
+        const remaining = 92 - currentProgressVal;
+        currentProgressVal += Math.max(0.35, remaining * 0.08);
+        const rounded = Math.round(currentProgressVal);
+        if (progressBarFill) progressBarFill.style.width = `${rounded}%`;
+        if (progressPercent) progressPercent.textContent = `${rounded}%`;
+
+        if (currentProgressVal >= 25 && currentProgressVal < 65) {
+          updateStep(1, isUsingColab ? "SimpleLaMa executing on Colab GPU..." : "Synthesizing surrounding texture...");
+        } else if (currentProgressVal >= 65 && currentProgressVal < 88) {
+          updateStep(2, "Feathering boundary & blending micro-textures...");
+        } else if (currentProgressVal >= 88) {
+          updateStep(3, "Receiving lossless high-res buffer...");
+        }
+      }
+
+      if (elapsedSec > 12 && progressDetail) {
+        progressDetail.textContent = "Processing high-res image... Please wait, GPU is working actively!";
+      }
+    }, 100);
   }
-  function hideLoading() {
-    processingOverlay.style.display = 'none';
+
+  function updateStep(activeIdx, detailText) {
+    if (detailText && progressDetail) progressDetail.textContent = detailText;
+    stepItems.forEach((item, idx) => {
+      if (!item) return;
+      const iconEl = item.querySelector('.step-icon');
+      if (idx < activeIdx) {
+        item.className = 'step-item completed';
+        if (iconEl) iconEl.textContent = '✓';
+      } else if (idx === activeIdx) {
+        item.className = 'step-item active';
+      } else {
+        item.className = 'step-item';
+      }
+    });
+  }
+
+  function hideLoading(onComplete) {
+    if (progressInterval) clearInterval(progressInterval);
+    if (progressBarFill) progressBarFill.style.width = '100%';
+    if (progressPercent) progressPercent.textContent = '100%';
+    if (progressDetail) progressDetail.textContent = "Complete! Rendering canvas...";
+    
+    stepItems.forEach(item => {
+      if (item) {
+        item.className = 'step-item completed';
+        const iconEl = item.querySelector('.step-icon');
+        if (iconEl) iconEl.textContent = '✓';
+      }
+    });
+
+    setTimeout(() => {
+      processingOverlay.style.display = 'none';
+      if (onComplete) onComplete();
+    }, 320);
   }
 });
