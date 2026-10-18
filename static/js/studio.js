@@ -53,6 +53,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const statStamps = document.getElementById('statStamps');
   const statTime = document.getElementById('statTime');
 
+  // Colab GPU Acceleration Controls
+  const checkRemoteGpu = document.getElementById('checkRemoteGpu');
+  const colabUrlGroup = document.getElementById('colabUrlGroup');
+  const colabUrlInput = document.getElementById('colabUrlInput');
+  const btnTestColab = document.getElementById('btnTestColab');
+  const gpuStatusBadge = document.getElementById('gpuStatusBadge');
+  let apiBaseUrl = '';
+
   // View modes
   const modeSplit = document.getElementById('modeSplit');
   const modeClean = document.getElementById('modeClean');
@@ -121,6 +129,89 @@ document.addEventListener('DOMContentLoaded', () => {
   toolEraser.addEventListener('click', () => setActiveTool('eraser'));
 
   // ----------------------------------------------------
+  // Viewport Sizing & Canvas Scale Adjustment
+  // ----------------------------------------------------
+  function fitCanvasToViewport(w, h) {
+    const container = document.getElementById('viewportContainer');
+    if (!container) return;
+    const maxW = Math.max(280, container.clientWidth - 48);
+    const maxH = Math.max(280, container.clientHeight - 96);
+
+    const scale = Math.min(maxW / w, maxH / h, 1.0);
+    const displayW = Math.round(w * scale);
+    const displayH = Math.round(h * scale);
+
+    splitContainer.style.width = `${displayW}px`;
+    splitContainer.style.height = `${displayH}px`;
+    canvasWrapper.style.width = `${displayW}px`;
+    canvasWrapper.style.height = `${displayH}px`;
+
+    canvasBase.style.width = `${displayW}px`;
+    canvasBase.style.height = `${displayH}px`;
+    canvasResult.style.width = `${displayW}px`;
+    canvasResult.style.height = `${displayH}px`;
+    canvasMask.style.width = `${displayW}px`;
+    canvasMask.style.height = `${displayH}px`;
+  }
+
+  window.addEventListener('resize', () => {
+    if (currentImage) {
+      fitCanvasToViewport(currentImage.naturalWidth, currentImage.naturalHeight);
+    }
+  });
+
+  btnZoomFit.addEventListener('click', () => {
+    if (currentImage) {
+      fitCanvasToViewport(currentImage.naturalWidth, currentImage.naturalHeight);
+    }
+  });
+
+  // ----------------------------------------------------
+  // Colab GPU Acceleration Logic
+  // ----------------------------------------------------
+  checkRemoteGpu.addEventListener('change', () => {
+    colabUrlGroup.style.display = checkRemoteGpu.checked ? 'block' : 'none';
+    updateApiBaseUrl();
+  });
+
+  colabUrlInput.addEventListener('input', updateApiBaseUrl);
+
+  function updateApiBaseUrl() {
+    if (checkRemoteGpu.checked && colabUrlInput.value.trim()) {
+      apiBaseUrl = colabUrlInput.value.trim().replace(/\/+$/, '');
+      gpuStatusBadge.textContent = 'Colab GPU';
+      gpuStatusBadge.className = 'gpu-badge badge-active';
+    } else {
+      apiBaseUrl = '';
+      gpuStatusBadge.textContent = 'Local CPU';
+      gpuStatusBadge.className = 'gpu-badge';
+    }
+  }
+
+  btnTestColab.addEventListener('click', async () => {
+    const url = colabUrlInput.value.trim().replace(/\/+$/, '');
+    if (!url) {
+      alert("Masukkan URL tunnel Colab terlebih dahulu (misal: https://xxxx.trycloudflare.com)");
+      return;
+    }
+    btnTestColab.textContent = '...';
+    try {
+      const res = await fetch(`${url}/api/sample`);
+      const data = await res.json();
+      if (data.status === 'ok') {
+        alert("✅ Berhasil terhubung ke Google Colab GPU Server!\nSemua proses deteksi & inpainting sekarang menggunakan GPU Colab.");
+        updateApiBaseUrl();
+      } else {
+        alert("⚠️ Respons diterima tetapi format tidak sesuai.");
+      }
+    } catch (err) {
+      alert("❌ Gagal terhubung ke Colab URL.\nPastikan server di Google Colab masih berjalan dan URL Cloudflare tunnel masih aktif.\nError: " + err);
+    } finally {
+      btnTestColab.textContent = 'Test';
+    }
+  });
+
+  // ----------------------------------------------------
   // Image Loading & Canvas Initialization
   // ----------------------------------------------------
   function loadImage(src, filename = "image.jpg") {
@@ -142,6 +233,9 @@ document.addEventListener('DOMContentLoaded', () => {
       canvasResult.height = h;
       canvasMask.width = w;
       canvasMask.height = h;
+
+      // Fit and scale properly inside viewport
+      fitCanvasToViewport(w, h);
 
       // Draw original on base and result initially
       ctxBase.clearRect(0, 0, w, h);
@@ -218,7 +312,7 @@ document.addEventListener('DOMContentLoaded', () => {
   btnLoadDemo.addEventListener('click', async () => {
     showLoading("Generating realistic watermark sample...");
     try {
-      const res = await fetch('/api/sample');
+      const res = await fetch(`${apiBaseUrl}/api/sample`);
       const data = await res.json();
       if (data.status === 'ok') {
         loadImage(data.image, data.filename);
@@ -384,7 +478,7 @@ document.addEventListener('DOMContentLoaded', () => {
         use_heuristics: true
       };
 
-      const res = await fetch('/api/detect', {
+      const res = await fetch(`${apiBaseUrl}/api/detect`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -450,7 +544,7 @@ document.addEventListener('DOMContentLoaded', () => {
         feather: checkFeather.checked
       };
 
-      const res = await fetch('/api/inpaint', {
+      const res = await fetch(`${apiBaseUrl}/api/inpaint`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -525,7 +619,7 @@ document.addEventListener('DOMContentLoaded', () => {
     formData.append('dilation_px', dilationInput.value);
 
     try {
-      const res = await fetch('/api/batch', {
+      const res = await fetch(`${apiBaseUrl}/api/batch`, {
         method: 'POST',
         body: formData
       });

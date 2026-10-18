@@ -35,8 +35,24 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 os.makedirs(SAMPLES_FOLDER, exist_ok=True)
 
-# Initialize pipeline
-pipeline = WatermarkPipeline()
+# CORS headers for remote Colab connection
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    return response
+
+# Auto-detect CUDA GPU (Google Colab / Nvidia GPU)
+try:
+    import torch
+    HAS_CUDA = torch.cuda.is_available()
+except Exception:
+    HAS_CUDA = False
+
+print(f"[*] Watermark Engine Acceleration: {'CUDA GPU (High Speed)' if HAS_CUDA else 'CPU (Edge-Guided)'}")
+pipeline = WatermarkPipeline(use_gpu=HAS_CUDA)
+
 
 
 @app.route('/')

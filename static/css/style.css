@@ -555,43 +555,60 @@ input:checked + .slider:before {
 /* Canvas Split Container */
 .canvas-wrapper {
   position: relative;
-  max-width: 92%;
-  max-height: 85%;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
   border-radius: var(--radius-md);
   overflow: hidden;
   border: 1px solid var(--border-glass);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: auto;
 }
 
 .split-container {
   position: relative;
   display: block;
   user-select: none;
+  overflow: hidden;
 }
 
 .split-layer {
   position: absolute;
   top: 0;
   left: 0;
-  width: 100%;
   height: 100%;
   overflow: hidden;
 }
 
-.split-layer canvas {
+.layer-after {
+  position: relative;
+  z-index: 5;
+  width: 100%;
+  height: 100%;
+}
+
+.layer-after canvas {
   display: block;
-  max-width: 100%;
-  max-height: 100%;
+  width: 100%;
+  height: 100%;
 }
 
 .layer-before {
+  position: absolute;
+  top: 0;
+  left: 0;
   z-index: 10;
   width: 50%; /* controlled by slider */
+  height: 100%;
   border-right: 2px solid white;
+  overflow: hidden;
 }
 
-.layer-after {
-  z-index: 5;
+.layer-before canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
 }
 
 .canvas-mask-overlay {
@@ -614,6 +631,7 @@ input:checked + .slider:before {
   background: rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(8px);
   color: white;
+  pointer-events: none;
 }
 
 .tag-before { left: 16px; }
@@ -796,3 +814,85 @@ input:checked + .slider:before {
   padding: 12px;
   font-size: 0.8rem;
 }
+
+/* GPU Section */
+.gpu-section {
+  background: rgba(99, 102, 241, 0.05);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: var(--radius-md);
+}
+
+.gpu-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.gpu-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  transition: all 0.3s ease;
+}
+
+.gpu-badge.badge-active {
+  background: rgba(16, 185, 129, 0.2);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.2);
+}
+
+.colab-url-box {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.colab-label {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.input-with-btn {
+  display: flex;
+  gap: 6px;
+}
+
+.custom-input {
+  flex: 1;
+  background: var(--bg-card);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-sm);
+  color: var(--text-main);
+  padding: 8px 10px;
+  font-size: 0.8rem;
+  font-family: var(--font-mono);
+  outline: none;
+}
+
+.custom-input:focus {
+  border-color: var(--accent-primary);
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 0.75rem;
+  width: auto;
+}
+
+.colab-help {
+  margin-top: 6px;
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+
+.colab-help code {
+  color: var(--accent-secondary);
+}
+
