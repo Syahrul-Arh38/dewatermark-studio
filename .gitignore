@@ -1,0 +1,23 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Temporary storage & outputs
+uploads/*
+!uploads/.gitkeep
+output/*
+!output/.gitkeep
+models/*.onnx
+models/*.pt
+
+# OS specific
+.DS_Store
+Thumbs.db

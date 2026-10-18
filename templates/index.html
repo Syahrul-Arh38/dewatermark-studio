@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dewatermark AI Studio - Precision Watermark & Stamp Cleaner</title>
+  <meta name="description" content="Next-generation watermark removal studio with dual-pass CLAHE, multi-cluster stamp detection, manual brush, and neural inpainting.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Header -->
+    <header class="studio-header">
+      <div class="brand">
+        <div class="brand-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1>Dewatermark <span class="badge-pro">PRO</span></h1>
+          <p>Next-Gen Precision Watermark & Stamp Removal</p>
+        </div>
+      </div>
+
+      <nav class="studio-nav">
+        <button id="navStudio" class="nav-tab active">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+          Interactive Studio
+        </button>
+        <button id="navBatch" class="nav-tab">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>
+          Batch Queue
+        </button>
+      </nav>
+
+      <div class="header-actions">
+        <button id="btnLoadDemo" class="btn btn-secondary">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Load Demo Sample
+        </button>
+        <div class="status-indicator online">
+          <span class="status-dot"></span>
+          <span>Engine Online</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main class="studio-main">
+      <!-- Left Controls Sidebar -->
+      <aside class="studio-sidebar">
+        <div class="sidebar-section">
+          <h2 class="section-title">Tools & Brushes</h2>
+          <div class="tool-grid">
+            <button id="toolAuto" class="tool-btn active" title="AI Auto Scan">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+              <span>Auto AI</span>
+            </button>
+            <button id="toolBrush" class="tool-btn" title="Manual Brush">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.375 2.625a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.375-9.375z"/></svg>
+              <span>Brush</span>
+            </button>
+            <button id="toolEraser" class="tool-btn" title="Erase Mask">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 20H7L3 16C2 15 2 13 3 12L13 2L22 11L20 20Z"/></svg>
+              <span>Eraser</span>
+            </button>
+          </div>
+
+          <div class="control-group" id="brushControlGroup">
+            <div class="label-row">
+              <label for="brushSize">Brush Size</label>
+              <span id="brushSizeVal" class="val-badge">30px</span>
+            </div>
+            <input type="range" id="brushSize" min="5" max="150" value="30">
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <h2 class="section-title">AI Detection Settings</h2>
+          
+          <div class="control-group">
+            <div class="label-row">
+              <label for="sensitivity">Sensitivity</label>
+              <span id="sensitivityVal" class="val-badge">0.50</span>
+            </div>
+            <input type="range" id="sensitivity" min="0.1" max="1.0" step="0.05" value="0.50">
+          </div>
+
+          <div class="control-group">
+            <div class="label-row">
+              <label for="dilationPx">Dilation Expansion</label>
+              <span id="dilationVal" class="val-badge">9px</span>
+            </div>
+            <input type="range" id="dilationPx" min="1" max="25" step="2" value="9">
+          </div>
+
+          <div class="toggle-group">
+            <label class="toggle-switch">
+              <input type="checkbox" id="checkStamp" checked>
+              <span class="slider"></span>
+            </label>
+            <div class="toggle-text">
+              <span>Stamp Cluster Grouping</span>
+              <small>Auto-detects circular Telegram & RFans stamps</small>
+            </div>
+          </div>
+
+          <div class="toggle-group">
+            <label class="toggle-switch">
+              <input type="checkbox" id="checkFeather" checked>
+              <span class="slider"></span>
+            </label>
+            <div class="toggle-text">
+              <span>Edge Feathering</span>
+              <small>Blends boundaries to avoid hard edges</small>
+            </div>
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <h2 class="section-title">Inpainting Engine</h2>
+          <select id="selectEngine" class="custom-select">
+            <option value="auto">✨ Auto Neural (LaMa / Edge-Guided)</option>
+            <option value="edge_guided">⚡ Edge-Guided Multi-Stage (Fast)</option>
+            <option value="navier_stokes">🌊 Navier-Stokes (Fluid Texture)</option>
+            <option value="fast_telea">🚀 Fast Telea (Instant)</option>
+          </select>
+        </div>
+
+        <div class="sidebar-actions">
+          <button id="btnAutoScan" class="btn btn-primary glow-btn">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            Auto Scan Watermark
+          </button>
+          <button id="btnInpaint" class="btn btn-accent glow-btn" disabled>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+            Clean Watermark
+          </button>
+          <button id="btnDownload" class="btn btn-success" disabled>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Download Result
+          </button>
+        </div>
+      </aside>
+
+      <!-- Center Stage: Canvas Area -->
+      <section class="studio-viewport" id="viewportContainer">
+        <!-- Dropzone Empty State -->
+        <div class="dropzone" id="dropzone">
+          <div class="dropzone-content">
+            <div class="drop-icon">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242M12 12v9m-4-4 4-4 4 4"/>
+              </svg>
+            </div>
+            <h3>Drop your photo here, or browse</h3>
+            <p>Supports PNG, JPG, WEBP • Full resolution preserved • Clipboard paste (Ctrl+V)</p>
+            <input type="file" id="fileInput" accept="image/*" class="file-input-hidden">
+            <button class="btn btn-secondary" onclick="document.getElementById('fileInput').click()">
+              Select from Computer
+            </button>
+          </div>
+        </div>
+
+        <!-- Active Canvas Stage -->
+        <div class="canvas-stage" id="canvasStage" style="display: none;">
+          <!-- Top Floating Viewport Toolbar -->
+          <div class="viewport-toolbar">
+            <div class="view-mode-tabs">
+              <button id="modeSplit" class="view-tab active">Before / After Split</button>
+              <button id="modeClean" class="view-tab">Cleaned</button>
+              <button id="modeOriginal" class="view-tab">Original</button>
+              <button id="modeMask" class="view-tab">Mask Only</button>
+            </div>
+
+            <div class="toolbar-divider"></div>
+
+            <div class="canvas-actions">
+              <button id="btnClearMask" class="icon-btn" title="Clear Mask">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              </button>
+              <button id="btnZoomFit" class="icon-btn" title="Fit to Screen">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Canvas Layer Stack & Split Container -->
+          <div class="canvas-wrapper" id="canvasWrapper">
+            <div class="split-container" id="splitContainer">
+              <!-- Before (Original) Layer -->
+              <div class="split-layer layer-before" id="layerBefore">
+                <canvas id="canvasBase"></canvas>
+                <span class="split-tag tag-before">BEFORE</span>
+              </div>
+
+              <!-- After (Cleaned) Layer -->
+              <div class="split-layer layer-after" id="layerAfter">
+                <canvas id="canvasResult"></canvas>
+                <span class="split-tag tag-after">AFTER</span>
+              </div>
+
+              <!-- Drawing Mask Overlay (Always on top during editing) -->
+              <canvas id="canvasMask" class="canvas-mask-overlay"></canvas>
+
+              <!-- Draggable Split Divider -->
+              <div class="split-divider" id="splitDivider">
+                <div class="split-handle">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M8 5v14l-5-7 5-7zm8 14V5l5 7-5 7z"/>
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Custom Brush Cursor -->
+          <div id="brushCursor" class="brush-cursor"></div>
+
+          <!-- Processing Overlay Loader -->
+          <div id="processingOverlay" class="processing-overlay" style="display: none;">
+            <div class="spinner"></div>
+            <p id="processingText">AI is scanning and inpainting watermark...</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right Analytics Drawer -->
+      <aside class="studio-drawer">
+        <h2 class="section-title">Telemetry & Diagnostics</h2>
+        <div class="stat-card">
+          <div class="stat-label">Resolution</div>
+          <div class="stat-value" id="statDim">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Masked Pixels</div>
+          <div class="stat-value" id="statMasked">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Stamps Identified</div>
+          <div class="stat-value" id="statStamps">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Inpaint Time</div>
+          <div class="stat-value" id="statTime">—</div>
+        </div>
+
+        <div class="info-box">
+          <div class="info-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            Multi-Cluster Technology
+          </div>
+          <p>Unlike standard scripts, this engine detects multiple circular watermark stamps independently without misplacing the mask centroid in the middle of your subject.</p>
+        </div>
+      </aside>
+    </main>
+
+    <!-- Batch Processing Modal / View -->
+    <section class="batch-view" id="batchView" style="display: none;">
+      <div class="batch-header">
+        <div>
+          <h2>Batch Watermark Cleaner</h2>
+          <p>Drop multiple photos or a whole album to clean in high-speed parallel batches.</p>
+        </div>
+        <button id="btnBatchDownloadAll" class="btn btn-success" style="display: none;">
+          Download All as ZIP
+        </button>
+      </div>
+
+      <div class="batch-dropzone" id="batchDropzone">
+        <input type="file" id="batchFileInput" multiple accept="image/*" class="file-input-hidden">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+        <p>Drop folder or select multiple images to batch process</p>
+        <button class="btn btn-secondary" onclick="document.getElementById('batchFileInput').click()">
+          Select Multiple Images
+        </button>
+      </div>
+
+      <div class="batch-grid" id="batchGrid"></div>
+    </section>
+  </div>
+
+  <script src="/static/js/studio.js"></script>
+</body>
+</html>
