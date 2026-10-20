@@ -212,6 +212,7 @@ def api_batch():
             'out_filename': out_name,
             'elapsed_sec': res['elapsed_sec'],
             'thumb': bgr_to_base64(thumb_bgr, 'jpg', quality=85),
+            'cleaned': bgr_to_base64(res['cleaned_bgr'], 'jpg', quality=98),
             'download_url': f"/api/download-file/{batch_id}/{out_name}"
         })
 

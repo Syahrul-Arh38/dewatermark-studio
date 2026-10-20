@@ -722,8 +722,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function getRowActionHtml(item) {
-    if (item.status === 'completed' && item.downloadUrl) {
-      return `<a href="${item.downloadUrl}" download="cleaned_${item.filename}" class="btn-row-action btn-row-download" title="Unduh foto ini">⬇️ Unduh</a>`;
+    if (item.status === 'completed') {
+      const href = item.cleanedBase64 || item.downloadUrl || '#';
+      return `<a href="${href}" download="cleaned_${item.filename}" class="btn-row-action btn-row-download" title="Unduh foto ini">⬇️ Unduh</a>`;
     }
     if (item.status === 'processing') {
       return `<span style="font-size:0.75rem; color:var(--accent-secondary); font-family:var(--font-mono);">⚡ Aktif</span>`;
@@ -945,8 +946,9 @@ document.addEventListener('DOMContentLoaded', () => {
             item.status = 'completed';
             item.progress = 100;
             item.elapsedSec = outItem.elapsed_sec;
-            item.thumb = outItem.thumb;
-            item.downloadUrl = outItem.download_url ? `${apiBaseUrl}${outItem.download_url}` : null;
+            item.thumb = outItem.thumb || outItem.cleaned;
+            item.cleanedBase64 = outItem.cleaned;
+            item.downloadUrl = outItem.cleaned || (outItem.download_url ? `${apiBaseUrl}${outItem.download_url}` : null);
 
             if (rowEl) rowEl.className = 'batch-row is-completed';
             if (barEl) barEl.style.width = '100%';
@@ -1015,33 +1017,55 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // ZIP Download for Batch
+  // ZIP Download for Batch (Browser-Side JSZip Instant + Server Fallback)
   if (btnBatchDownloadAll) {
     btnBatchDownloadAll.addEventListener('click', async () => {
-      if (!currentBatchId) return;
+      const completedItems = batchQueue.filter(it => it.status === 'completed');
+      if (completedItems.length === 0) return;
 
       const originalText = btnBatchDownloadAll.innerHTML;
       btnBatchDownloadAll.innerHTML = `<span>⏳ Mengunduh ZIP...</span>`;
       btnBatchDownloadAll.disabled = true;
 
       try {
-        const downloadUrl = `${apiBaseUrl}/api/download-batch/${currentBatchId}`;
+        // Mode 1 (Super Cepat & 100% Anti-Gagal): Buat ZIP langsung di browser menggunakan JSZip
+        if (window.JSZip) {
+          const zip = new window.JSZip();
+          for (const it of completedItems) {
+            if (it.cleanedBase64) {
+              const b64Data = it.cleanedBase64.replace(/^data:image\/[a-z]+;base64,/, '');
+              zip.file(`cleaned_${it.filename}`, b64Data, { base64: true });
+            }
+          }
+          const blob = await zip.generateAsync({ type: 'blob' });
+          const blobUrl = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = blobUrl;
+          a.download = `${currentBatchId || 'cleaned_photos'}.zip`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          window.URL.revokeObjectURL(blobUrl);
+          return;
+        }
+
+        // Mode 2: Unduh ZIP tunggal gabungan dari server / Colab
+        const downloadUrl = `${apiBaseUrl}/api/download-batch/${currentBatchId || 'batch'}`;
         const response = await fetch(downloadUrl);
         if (!response.ok) throw new Error("Gagal mengunduh ZIP dari server (" + response.status + ")");
 
         const blob = await response.blob();
         const blobUrl = window.URL.createObjectURL(blob);
-
         const a = document.createElement('a');
         a.href = blobUrl;
-        a.download = `${currentBatchId}.zip`;
+        a.download = `${currentBatchId || 'cleaned_photos'}.zip`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         window.URL.revokeObjectURL(blobUrl);
       } catch (err) {
         console.warn("Direct blob download notice, fallback to standard link:", err);
-        window.location.href = `${apiBaseUrl}/api/download-batch/${currentBatchId}`;
+        window.location.href = `${apiBaseUrl}/api/download-batch/${currentBatchId || 'batch'}`;
       } finally {
         btnBatchDownloadAll.innerHTML = originalText;
         btnBatchDownloadAll.disabled = false;

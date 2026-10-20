@@ -544,8 +544,10 @@ def api_inpaint():
     })
 
 
-# Batch Processing 100+ Gambar
+# Batch Processing 100+ Gambar (Disimpan Terpusat di Disk Colab & Disatukan dalam 1 ZIP)
 BATCH_STORAGE = {}
+BATCH_OUTPUT_DIR = "/content/cleaned_photos"
+os.makedirs(BATCH_OUTPUT_DIR, exist_ok=True)
 
 @app.route('/api/batch', methods=['POST'])
 def api_batch():
@@ -554,51 +556,85 @@ def api_batch():
 
     files = request.files.getlist('files')
     wm_mode = request.form.get('wm_mode', 'auto')
+
+    # Gunakan batch_id dari client agar semua foto dari antrean tergabung dalam 1 file ZIP!
+    batch_id = request.form.get('batch_id')
+    if not batch_id or not batch_id.startswith('batch_'):
+        batch_id = f"batch_{int(time.time())}"
+
+    # Folder batch khusus di Colab
+    batch_dir = os.path.join(BATCH_OUTPUT_DIR, batch_id)
+    os.makedirs(batch_dir, exist_ok=True)
+    os.makedirs(BATCH_OUTPUT_DIR, exist_ok=True)
+
     results = []
-    timestamp = int(time.time())
-    batch_id = f"batch_{timestamp}"
-    zip_bytes_io = io.BytesIO()
+    zip_path = f"/content/{batch_id}.zip"
+    latest_zip_path = f"/content/cleaned_batch_latest.zip"
 
-    print(f"\n[*] Memulai Batch Processing {len(files)} gambar di GPU (Mode: {wm_mode})...")
+    print(f"\n[*] Memproses {len(files)} gambar di GPU [Batch: {batch_id}] (Mode: {wm_mode})...")
 
-    with zipfile.ZipFile(zip_bytes_io, 'w', compression=zipfile.ZIP_DEFLATED) as zip_out:
-        for idx, file in enumerate(files):
-            if not file.filename: continue
-            file_bytes = np.frombuffer(file.read(), np.uint8)
-            img_bgr = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
-            if img_bgr is None: continue
-            h, w = img_bgr.shape[:2]
+    for idx, file in enumerate(files):
+        if not file.filename: continue
+        file_bytes = np.frombuffer(file.read(), np.uint8)
+        img_bgr = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+        if img_bgr is None: continue
+        h, w = img_bgr.shape[:2]
 
-            t0 = time.time()
-            mask = generate_watermark_mask(img_bgr, wm_mode=wm_mode)
-            img_pil = Image.fromarray(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB))
-            mask_pil = Image.fromarray(mask).convert('L')
-            cleaned_pil = lama(img_pil, mask_pil)
-            cleaned_bgr = cv2.cvtColor(np.array(cleaned_pil), cv2.COLOR_RGB2BGR)
-            elapsed = round(time.time() - t0, 3)
+        t0 = time.time()
+        mask = generate_watermark_mask(img_bgr, wm_mode=wm_mode)
+        img_pil = Image.fromarray(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB))
+        mask_pil = Image.fromarray(mask).convert('L')
+        cleaned_pil = lama(img_pil, mask_pil)
+        cleaned_bgr = cv2.cvtColor(np.array(cleaned_pil), cv2.COLOR_RGB2BGR)
+        elapsed = round(time.time() - t0, 3)
 
-            out_name = f"cleaned_{file.filename}"
-            _, buf = cv2.imencode('.jpg', cleaned_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 98])
-            zip_out.writestr(out_name, buf.tobytes())
+        out_name = f"cleaned_{file.filename}"
+        out_file_path = os.path.join(batch_dir, out_name)
+        root_out_path = os.path.join(BATCH_OUTPUT_DIR, out_name)
 
-            thumb = cv2.resize(cleaned_bgr, (200, int(200 * h / max(1, w))), interpolation=cv2.INTER_AREA)
-            results.append({
-                'filename': file.filename,
-                'out_filename': out_name,
-                'elapsed_sec': elapsed,
-                'thumb': bgr_to_base64(thumb, 'jpg', 80)
-            })
-            print(f"  [{idx+1}/{len(files)}] {file.filename} -> Bersih ({elapsed}s)")
+        # 1. Simpan foto bersih beresolusi penuh langsung ke disk Colab
+        _, buf = cv2.imencode('.jpg', cleaned_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 98])
+        img_bytes = buf.tobytes()
+        with open(out_file_path, "wb") as f_out:
+            f_out.write(img_bytes)
+        with open(root_out_path, "wb") as f_out:
+            f_out.write(img_bytes)
 
-    zip_bytes_io.seek(0)
-    zip_data = zip_bytes_io.getvalue()
-    BATCH_STORAGE[batch_id] = zip_data
+        # 2. Append ke file ZIP tunggal (agar semua foto batch tergabung dalam 1 file ZIP!)
+        for z_target in [zip_path, latest_zip_path]:
+            mode_z = 'a' if os.path.exists(z_target) else 'w'
+            with zipfile.ZipFile(z_target, mode_z, compression=zipfile.ZIP_DEFLATED) as zip_out:
+                existing_names = zip_out.namelist() if mode_z == 'a' else []
+                if out_name not in existing_names:
+                    zip_out.writestr(out_name, img_bytes)
 
-    # Simpan juga ke disk Colab
+        # 3. Jika Google Drive tersambung, simpan otomatis juga ke Google Drive
+        drive_out = "/content/drive/MyDrive/DewatermarkAI/cleaned_photos"
+        if os.path.exists("/content/drive/MyDrive"):
+            os.makedirs(drive_out, exist_ok=True)
+            with open(os.path.join(drive_out, out_name), "wb") as f_drive:
+                f_drive.write(img_bytes)
+
+        # Thumbnail untuk UI antrean
+        thumb = cv2.resize(cleaned_bgr, (200, int(200 * h / max(1, w))), interpolation=cv2.INTER_AREA)
+
+        # Base64 foto bersih penuh (seperti mode deteksi single!)
+        cleaned_b64 = bgr_to_base64(cleaned_bgr, 'jpg', quality=98)
+
+        results.append({
+            'filename': file.filename,
+            'out_filename': out_name,
+            'elapsed_sec': elapsed,
+            'thumb': bgr_to_base64(thumb, 'jpg', 80),
+            'cleaned': cleaned_b64,
+            'download_url': f"/api/download-file/{batch_id}/{out_name}"
+        })
+        print(f"  [{idx+1}/{len(files)}] {file.filename} -> Bersih ({elapsed}s) | Disatukan ke: {zip_path}")
+
+    # Update cache memori zip
     try:
-        with open(f"{batch_id}.zip", "wb") as f_disk:
-            f_disk.write(zip_data)
-        print(f"💾 File ZIP tersimpan di Colab: {batch_id}.zip ({len(zip_data) / 1e6:.2f} MB)")
+        with open(zip_path, "rb") as f_z:
+            BATCH_STORAGE[batch_id] = f_z.read()
     except Exception:
         pass
 
@@ -606,20 +642,38 @@ def api_batch():
         'status': 'ok',
         'processed_count': len(results),
         'batch_id': batch_id,
+        'zip_file': f"{batch_id}.zip",
         'items': results
     })
 
 
-# Endpoint Download ZIP Anti-Stuck IDM
+# Endpoint Unduh Foto Individual dari Batch
+@app.route('/api/download-file/<batch_id>/<filename>')
+def api_download_file(batch_id, filename):
+    safe_name = os.path.basename(filename)
+    candidates = [
+        f"/content/cleaned_photos/{batch_id}/{safe_name}",
+        f"/content/cleaned_photos/{safe_name}",
+        f"/content/drive/MyDrive/DewatermarkAI/cleaned_photos/{safe_name}"
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            return send_file(path, as_attachment=True, download_name=safe_name)
+    return jsonify({'error': 'File not found'}), 404
+
+
+# Endpoint Unduh ZIP Tunggal Gabungan
 @app.route('/api/download-batch/<batch_id>')
 def api_download_batch(batch_id):
+    zip_path = f"/content/{batch_id}.zip"
+    if os.path.exists(zip_path):
+        return send_file(zip_path, as_attachment=True, download_name=f"{batch_id}.zip")
+    if os.path.exists("/content/cleaned_batch_latest.zip"):
+        return send_file("/content/cleaned_batch_latest.zip", as_attachment=True, download_name="cleaned_batch.zip")
     if batch_id in BATCH_STORAGE:
         data_bytes = BATCH_STORAGE[batch_id]
         resp = Response(data_bytes, mimetype='application/zip')
         resp.headers['Content-Disposition'] = f'attachment; filename="{batch_id}.zip"'
-        resp.headers['Content-Length'] = str(len(data_bytes))
-        resp.headers['Accept-Ranges'] = 'none'
-        resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
         return resp
     return jsonify({'error': 'Batch not found'}), 404
 
