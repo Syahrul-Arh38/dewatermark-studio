@@ -63,9 +63,17 @@ else:
     for d in [IMG_TRAIN, IMG_VAL, LBL_TRAIN, LBL_VAL]:
         os.makedirs(d, exist_ok=True)
 
-    # 1. Template Bawaan (Stempel RFans & Teks Strip Diagonal)
-    B64_STAMP = "iVBORw0KGgoAAAANSUhEUgAAAIwAAABgCAAAAADqLcUbAAAFh0lEQVRoBc3BW0IbCQJFMZ39L/pOlQ0Y/ICQ6Y9I+YfkH5J/SP4h+YfkH5J/SP4b81R+I/+v+Un+UP4P8yHPzLt8GHkqf2ne5CdzkTeTp/I35iJ/bE75Vn5tLvLFYi0vzSHfyC/NKfcma8grc8hL+ZU55NHImobWnHJa3swhL+QX5pAvJoc1rWVoTWtyWG6GPJVvTd7NIZ9Mk9PQ0Bpa1oQhN0OeyHeGXMwhF4tlaIRltBZrLWvCNLkZ8ijfmlwMuRgZLWutyVPLYZlT3g25l+8tp5E3E6ZpTSYvzKm1rMnVkDv5A0NOc9WaljsTky9GyxzyZuSrvLC8G7mYrMmQd3PIZ3PIh6HlZuSLvLBcDTktQ5ObkVdGribLJyOf5Qcjp2XNoeVq8qPJm+WzkU/yvZHTmtayXEz+0OSZkZt8a+RiTWtyMfmFyRMjH/KdkcO01uRq+a3Jo5F3+cbIYbQmV8vfmDwYeZPXJhfLmpbD8reWB5M3eWlyGBq5mPynRq7yyuQwWSaHyX9tcpUXRhgZcpj82pzy0uQiz41cTN4svzZv8srkIk+NzCGTi+WJIV+tOWXe5aXJKU9N5iLLafliPuQ0ZJ7LxcidySnPTAyNnCZXc4j5EHOVeSZXI3dGDnliZMjIYWFuMk81N82bWA7Lg8khT0yMMDkszCfNU81N8y6vTQ55NGLICMthPmkuGpo7zaH5kJdGyKPJYS7yYT5pbpo7zZ28NEIejJzmkJs5ZQ7NTfOhOTR38mjkMCEPJi/MTeZD86E5NF/liZHDhNwbeWE+xHxoDs2heSLPjBwm5N7klfkQc8ppnmvkRxNyb/LK3GROOc29/MKE3Bl5NGE+aU45zYd8Z+TBhNyZPBpiPmkuchryylw15MGE3Jk8MWI+a075zmTeNeTBhNyZPDHCfJWXlsPQvGvIgwm5M3ltTi3fmAxhaMjFkHsj5KuR15aXRg4jc4iRIRcjD0bIVyO/MzkNYWQOMTJvMvJhcpoc8tXIb8whhznEyJwyMm8y8mByyFcjf2IIc8hhDjEyF43Mm4zcGznkq5HD5KmRwwhzymFOGZkPmVMOI/cmp3w1wpCbuYiRwwhzEXPVaGguMnI1b3IzOeXOhJEP8y4jhxHmIuamIXPKCJN5kw8jp9yZ3JmbRg4jhkYMzUVD5pR5lA+Ti9yZ3BnCyMicYmTIkDk1xByad80pn41c5M7kqyHv5kOGDBkyp4YwNO/yZsjV5Cp3Rr4Y8mZuMh8aYg4NYWjIZ3PKaeQq9yZfjLybm8yHhjA05JU5NDlM3uTe5IuRd0MYmpuGMDR5amHIiJE3uTfy2ci7IQwNOcxFfrCcRoyMvMuDydVyGHIYDWFo5DTys+ViWkYjH/Jg5DQ5DGFoCHOVP7dczVUmN3k0uVgO8yFDGPmd5WKai0Zu8mjkk3kTI39jeTMxMvJJnph8Nhf5a5MPk9PIZ3li5L+0vBmaMPJFnhl5tPyN5cOynEa+ylMjj5ZfWy6maVkOI3fy1Mgzk9+YvJmrHEbu5bmR5yZ/ZnIzWU5DHuSFkc+WdyM/GPlqyGHkibw0+WxyM/LCkJuRw3IaeSavjXyYjNzMRd7MRb4YLe+GPJVvjLxb5pB7c5VnhibLYeSFfGfkarKcJn9qLctaGMLyRL415LRM03KavDS0pqHlYshh5FF+MORqWUNraOTeZA2tabkacjF5lJ/MIacha61lLQ9G1rKGXMwh38rP5pB3ozk1GQ2NsKw15N0c8oP8iTnkYjkMDbHmlNPQMnkzh/wof2YOuVgsazK0rBEWy80c8gfyk8lpTvlkMbSskeWLOeWP5CeTN3ORl5abucifyu/MVb41b/IL+bV5lyfmXX4pf2V+kL+QvzfP5K/lH5J/SP4h+YfkH/I/eP/Gf4QzsrgAAAAASUVORK5CYII="
-    stamp_img = cv2.imdecode(np.frombuffer(base64.b64decode(B64_STAMP), np.uint8), cv2.IMREAD_GRAYSCALE)
+    # 1. Master Template (Stempel Bulat Besar RFans & Teks Strip Diagonal & Sakerly)
+    with open('core/b64_stamp.txt', 'r') as _f_s:
+        B64_STAMP = _f_s.read().strip()
+    with open('core/b64_sakerly.txt', 'r') as _f_sk:
+        B64_SAKERLY = _f_sk.read().strip()
+
+    stamp_raw = cv2.imdecode(np.frombuffer(base64.b64decode(B64_STAMP), np.uint8), cv2.IMREAD_UNCHANGED)
+    stamp_img = stamp_raw[:, :, 3] if (len(stamp_raw.shape) == 3 and stamp_raw.shape[2] == 4) else stamp_raw
+
+    sakerly_raw = cv2.imdecode(np.frombuffer(base64.b64decode(B64_SAKERLY), np.uint8), cv2.IMREAD_UNCHANGED)
+    sakerly_img = sakerly_raw[:, :, 3] if (len(sakerly_raw.shape) == 3 and sakerly_raw.shape[2] == 4) else sakerly_raw
 
     # Buat template teks strip diagonal (@RFANS, TG@..., 电报直接搜索, t.me/SakerLy)
     text_strip_templates = []
@@ -75,8 +83,8 @@ else:
         cv2.circle(t_can, (14, 16), 10, 255, 2)
         text_strip_templates.append(('text_strip', t_can))
 
-    # Kumpulkan semua template watermark (stempel + teks strip + sampel user dari Google Drive)
-    watermark_templates = [('stamp', stamp_img)] + text_strip_templates
+    # Kumpulkan semua template watermark (stempel + sakerly + teks strip + sampel user dari Google Drive)
+    watermark_templates = [('stamp', stamp_img), ('sakerly', sakerly_img)] + text_strip_templates
 
     drive_samples = glob.glob(os.path.join(DRIVE_SAMPLES_DIR, "*.*"))
     local_samples = glob.glob(os.path.join(LOCAL_SAMPLES_DIR, "*.*"))
@@ -236,13 +244,21 @@ notebook_content = {
             'cell_type': 'markdown',
             'metadata': {},
             'source': [
-                '# 🚀 Dewatermark Pro — Google Colab GPU Backend Server\n',
+                '# 🚀 Dewatermark Pro — Google Colab GPU Backend Server (v2.2 Precision AI Edition)\n',
                 '\n',
-                'Sistem AI pembersih watermark berkecepatan tinggi dengan **Auto-Training YOLOv11 Khusus Watermark** dan **Inpainting SimpleLaMa GPU**.\n',
+                'Akselerasi GPU Cloud untuk **SimpleLaMa Neural Inpainting** dan Pembersihan Watermark Presisi Tinggi.\n',
                 '\n',
-                '### ⚠️ Langkah Wajib:\n',
-                '1. Klik menu **Runtime** di atas ➔ **Change runtime type** (Ubah jenis runtime) ➔ Pilih **T4 GPU** ➔ **Save**.\n',
-                '2. Jalankan ketiga Cell di bawah secara berurutan!\n'
+                '### ⚡ UPDATE TERBARU (Sakerly & RFans Master Clean Precision):\n',
+                '- **Stempel Bulat RFans**: 100% menggunakan master template bersih `wm_bulat_besar.png` (stroke-level 1-2px, anti-blobs, tekstur karpet & sepatu tetap 100% utuh tanpa kabut buram).\n',
+                '- **Sakerly Signature**: Full-image pyramid search untuk tanda tangan coral-red `t.me/Sakerly` di mana saja (kacamata hitam, rambut, baju, sudut) dalam <20ms.\n',
+                '- **Anti-Solid Box**: Poligon balok solid OCR telah dihapus total. Area stempel bulat dilindungi dari poligon OCR.\n',
+                '- **Zero Training Required**: Template matematis langsung aktif otomatis tanpa perlu training lagi.\n',
+                '\n',
+                '### 🚀 Cara Menjalankan (Hanya 2 Langkah Cepat!):\n',
+                '1. **Langkah 1**: Klik menu **Runtime** ➔ **Change runtime type** ➔ Pilih **T4 GPU** ➔ **Save**.\n',
+                '2. **Langkah 2**: Jalankan **CELL 1 (Setup Modul)** (~15 detik).\n',
+                '3. **Langkah 3**: Jalankan **CELL 2 (Start GPU Server)**.\n',
+                '4. Copy link `https://...trycloudflare.com` yang muncul di bagian bawah, lalu tempel ke Web Studio lokal Anda di menu **⚡ GPU Acceleration**!\n'
             ]
         },
         {
@@ -251,19 +267,28 @@ notebook_content = {
             'metadata': {},
             'outputs': [],
             'source': [
-                '# CELL 1: Siapkan Modul & Hubungkan Google Drive (~15 detik)\n',
+                '# CELL 1: Siapkan Modul LaMa Inpainting GPU (~15 detik)\n',
                 '!pip install --no-deps simple-lama-inpainting ultralytics --quiet\n',
                 '!pip install flask-cors easyocr --quiet\n',
                 '\n',
                 'import os, sys\n',
-                'try:\n',
-                '    from google.colab import drive\n',
-                '    if not os.path.exists("/content/drive/MyDrive"):\n',
-                '        drive.mount("/content/drive")\n',
-                '        print("✅ Google Drive terhubung! Model hasil training akan tersimpan permanen di sini.")\n',
-                'except Exception as e:\n',
-                '    print(f"ℹ️ Google Drive notice: {e}")\n',
-                'print("✅ Modul AI berhasil terpasang di Colab!")\n'
+                'print("✅ Modul LaMa GPU Acceleration berhasil terpasang di Colab!")\n'
+            ]
+        },
+        {
+            'cell_type': 'code',
+            'execution_count': None,
+            'metadata': {},
+            'outputs': [],
+            'source': [line + '\n' for line in server_code.splitlines()]
+        },
+        {
+            'cell_type': 'markdown',
+            'metadata': {},
+            'source': [
+                '---\n',
+                '### 📦 [OPSIONAL] Cell Training Tambahan (Tidak Diperlukan untuk RFans / Sakerly)\n',
+                'Hanya jalankan cell di bawah ini jika suatu hari Anda ingin melatih model AI baru untuk watermark asing yang belum ada di daftar template.\n'
             ]
         },
         {
@@ -272,13 +297,6 @@ notebook_content = {
             'metadata': {},
             'outputs': [],
             'source': [line + '\n' for line in trainer_code.splitlines()]
-        },
-        {
-            'cell_type': 'code',
-            'execution_count': None,
-            'metadata': {},
-            'outputs': [],
-            'source': [line + '\n' for line in server_code.splitlines()]
         }
     ],
     'metadata': {

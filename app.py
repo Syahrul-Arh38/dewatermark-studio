@@ -92,11 +92,13 @@ def api_detect():
     img_bgr = base64_to_bgr(image_b64)
     sensitivity = float(data.get('sensitivity', 0.5))
     dilation_px = int(data.get('dilation_px', 2))
+    wm_mode = str(data.get('wm_mode', 'auto'))
     use_ocr = bool(data.get('use_ocr', True))
     use_heuristics = bool(data.get('use_heuristics', True))
 
     det_res = pipeline.detector.detect(
         img_bgr=img_bgr,
+        wm_mode=wm_mode,
         use_ocr=use_ocr,
         use_heuristics=use_heuristics,
         sensitivity=sensitivity,
@@ -111,6 +113,7 @@ def api_detect():
         'mask': bgr_to_base64(mask_bgr, 'png'),
         'stamp_count': det_res['stamp_count'],
         'detected_texts': det_res.get('detected_texts', []),
+        'mode': det_res.get('mode', wm_mode),
         'pixels_masked': int(np.count_nonzero(mask))
     })
 
@@ -157,18 +160,23 @@ def api_inpaint():
 
 @app.route('/api/batch', methods=['POST'])
 def api_batch():
-    """Process multiple uploaded files."""
+    """Process multiple uploaded files or sequential single-file batch items."""
     if 'files' not in request.files:
         return jsonify({'error': 'No files uploaded'}), 400
 
     files = request.files.getlist('files')
     method = request.form.get('method', 'auto')
     sensitivity = float(request.form.get('sensitivity', 0.5))
-    dilation = int(request.form.get('dilation_px', 9))
+    dilation = int(request.form.get('dilation_px', 2))
+    wm_mode = request.form.get('wm_mode', 'auto')
 
     results = []
     timestamp = int(time.time())
-    batch_out_dir = os.path.join(OUTPUT_FOLDER, f"batch_{timestamp}")
+    batch_id = request.form.get('batch_id')
+    if not batch_id or not batch_id.startswith('batch_'):
+        batch_id = f"batch_{timestamp}"
+
+    batch_out_dir = os.path.join(OUTPUT_FOLDER, batch_id)
     os.makedirs(batch_out_dir, exist_ok=True)
 
     for file in files:
@@ -185,6 +193,7 @@ def api_batch():
             use_heuristics=True,
             sensitivity=sensitivity,
             dilation_px=dilation,
+            wm_mode=wm_mode,
             inpaint_method=method
         )
 
@@ -192,19 +201,38 @@ def api_batch():
         out_path = os.path.join(batch_out_dir, out_name)
         save_image_lossless(res['cleaned_bgr'], out_path)
 
+        # Generate lightweight thumbnail
+        h_orig, w_orig = res['cleaned_bgr'].shape[:2]
+        thumb_w = 160
+        thumb_h = max(1, int(thumb_w * h_orig / max(1, w_orig)))
+        thumb_bgr = cv2.resize(res['cleaned_bgr'], (thumb_w, thumb_h), interpolation=cv2.INTER_AREA)
+
         results.append({
             'filename': file.filename,
             'out_filename': out_name,
             'elapsed_sec': res['elapsed_sec'],
-            'thumb': bgr_to_base64(cv2.resize(res['cleaned_bgr'], (200, 150)), 'jpg', quality=80)
+            'thumb': bgr_to_base64(thumb_bgr, 'jpg', quality=85),
+            'download_url': f"/api/download-file/{batch_id}/{out_name}"
         })
 
     return jsonify({
         'status': 'ok',
         'processed_count': len(results),
-        'batch_id': f"batch_{timestamp}",
+        'batch_id': batch_id,
         'items': results
     })
+
+
+@app.route('/api/download-file/<batch_id>/<filename>')
+def download_single_batch_file(batch_id, filename):
+    """Download an individual cleaned image from a batch."""
+    safe_batch = os.path.basename(batch_id)
+    safe_name = os.path.basename(filename)
+    file_path = os.path.join(OUTPUT_FOLDER, safe_batch, safe_name)
+    if not os.path.exists(file_path):
+        return jsonify({'error': 'File not found'}), 404
+    from flask import send_file
+    return send_file(file_path, as_attachment=True, download_name=safe_name)
 
 
 @app.route('/api/download-batch/<batch_id>')

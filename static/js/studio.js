@@ -39,6 +39,21 @@ document.addEventListener('DOMContentLoaded', () => {
   const checkStamp = document.getElementById('checkStamp');
   const checkFeather = document.getElementById('checkFeather');
   const selectEngine = document.getElementById('selectEngine');
+  const selectWmMode = document.getElementById('selectWmMode');
+  const wmModeHint = document.getElementById('wmModeHint');
+
+  if (selectWmMode && wmModeHint) {
+    selectWmMode.addEventListener('change', () => {
+      const m = selectWmMode.value;
+      if (m === 'sakerly') {
+        wmModeHint.textContent = 'Mode Sakerly: Deteksi tanda tangan coral-red di sudut foto (<10ms).';
+      } else if (m === 'rfans') {
+        wmModeHint.textContent = 'Mode RFans: Memindai stempel bulat 4-sudut & teks transparan miring.';
+      } else {
+        wmModeHint.textContent = 'Mode Auto: Memindai semua jenis watermark secara komprehensif.';
+      }
+    });
+  }
 
   const btnAutoScan = document.getElementById('btnAutoScan');
   const btnInpaint = document.getElementById('btnInpaint');
@@ -46,6 +61,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnLoadDemo = document.getElementById('btnLoadDemo');
   const btnClearMask = document.getElementById('btnClearMask');
   const btnZoomFit = document.getElementById('btnZoomFit');
+  const btnResetImage = document.getElementById('btnResetImage');
 
   // Stats
   const statDim = document.getElementById('statDim');
@@ -68,13 +84,26 @@ document.addEventListener('DOMContentLoaded', () => {
   const modeOriginal = document.getElementById('modeOriginal');
   const modeMask = document.getElementById('modeMask');
 
-  // Navigation
+  // Navigation & Batch Controls
   const navStudio = document.getElementById('navStudio');
   const navBatch = document.getElementById('navBatch');
   const studioMain = document.querySelector('.studio-main');
   const batchView = document.getElementById('batchView');
+  const batchDropzone = document.getElementById('batchDropzone');
   const batchFileInput = document.getElementById('batchFileInput');
-  const batchGrid = document.getElementById('batchGrid');
+  const batchTotalCountBadge = document.getElementById('batchTotalCountBadge');
+  const batchControlsCard = document.getElementById('batchControlsCard');
+  const batchWmModeSelect = document.getElementById('batchWmModeSelect');
+  const batchEngineSelect = document.getElementById('batchEngineSelect');
+  const btnAddMoreBatch = document.getElementById('btnAddMoreBatch');
+  const btnClearBatchQueue = document.getElementById('btnClearBatchQueue');
+  const btnStartBatch = document.getElementById('btnStartBatch');
+  const batchGlobalProgressCard = document.getElementById('batchGlobalProgressCard');
+  const batchGlobalStatusText = document.getElementById('batchGlobalStatusText');
+  const batchGlobalTimer = document.getElementById('batchGlobalTimer');
+  const batchGlobalProgressFill = document.getElementById('batchGlobalProgressFill');
+  const batchListContainer = document.getElementById('batchListContainer');
+  const batchListBody = document.getElementById('batchListBody');
   const btnBatchDownloadAll = document.getElementById('btnBatchDownloadAll');
 
   // State
@@ -389,7 +418,39 @@ document.addEventListener('DOMContentLoaded', () => {
     updateMaskStats();
   }
 
-  btnClearMask.addEventListener('click', clearMask);
+  if (btnClearMask) {
+    btnClearMask.addEventListener('click', clearMask);
+  }
+
+  function resetImage() {
+    currentImage = null;
+    originalBase64 = null;
+    cleanedBase64 = null;
+    if (fileInput) fileInput.value = '';
+
+    // Clear canvases
+    ctxBase.clearRect(0, 0, canvasBase.width, canvasBase.height);
+    ctxResult.clearRect(0, 0, canvasResult.width, canvasResult.height);
+    ctxMask.clearRect(0, 0, canvasMask.width, canvasMask.height);
+
+    // Switch view back to dropzone
+    canvasStage.style.display = 'none';
+    dropzone.style.display = 'flex';
+
+    // Disable action buttons
+    btnInpaint.disabled = true;
+    btnDownload.disabled = true;
+
+    // Reset telemetry stats
+    statDim.textContent = '—';
+    statMasked.textContent = '0 px';
+    statStamps.textContent = '0';
+    statTime.textContent = '—';
+  }
+
+  if (btnResetImage) {
+    btnResetImage.addEventListener('click', resetImage);
+  }
 
   function updateMaskStats() {
     const imgData = ctxMask.getImageData(0, 0, canvasMask.width, canvasMask.height);
@@ -469,20 +530,21 @@ document.addEventListener('DOMContentLoaded', () => {
   // AI Detection & Inpainting Actions
   // ----------------------------------------------------
   async function autoScanWatermark() {
-    if (!currentImage) return;
-    showLoading("AI Scanning Watermarks & Stamps...", [
-      "Dual CLAHE",
-      "Diagonal OCR",
-      "Transparent Sweep",
-      "Mask Overlay"
-    ]);
+    const wmMode = selectWmMode ? selectWmMode.value : 'auto';
+    const scanTitle = wmMode === 'sakerly' ? 'Detecting Sakerly Signature...' : (wmMode === 'rfans' ? 'Scanning RFans Stamps & Text...' : 'AI Scanning Watermarks & Stamps...');
+    const scanSteps = wmMode === 'sakerly' 
+      ? ["Color Gating", "Template Search", "Anchor Match", "Exact Mask"]
+      : ["Corner Scan", "Dual CLAHE", "Transparent Sweep", "Mask Overlay"];
+
+    showLoading(scanTitle, scanSteps);
 
     try {
       const payload = {
         image: originalBase64,
+        wm_mode: wmMode,
         sensitivity: parseFloat(sensitivityInput.value),
         dilation_px: parseInt(dilationInput.value, 10),
-        use_ocr: true,
+        use_ocr: wmMode !== 'sakerly',
         use_heuristics: true
       };
 
@@ -632,84 +694,360 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // ----------------------------------------------------
-  // Batch Queue Processing
+  // Batch Queue & Row-by-Row Sequential Processing
   // ----------------------------------------------------
-  batchFileInput.addEventListener('change', async (e) => {
-    if (!e.target.files || e.target.files.length === 0) return;
-    const files = e.target.files;
+  let batchQueue = [];
+  let isBatchRunning = false;
 
-    batchGrid.innerHTML = '';
-    showLoading(`Processing batch of ${files.length} images...`);
+  function formatBytes(bytes) {
+    if (!bytes || bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  }
 
-    const formData = new FormData();
-    for (let f of files) {
-      formData.append('files', f);
+  function getStatusBadgeHtml(item) {
+    switch (item.status) {
+      case 'processing':
+        return `<span class="batch-status-badge status-processing"><span class="pulse-dot"></span> Memproses...</span>`;
+      case 'completed':
+        return `<span class="batch-status-badge status-completed">✅ Selesai (${item.elapsedSec}s)</span>`;
+      case 'error':
+        return `<span class="batch-status-badge status-error">❌ Gagal</span>`;
+      case 'pending':
+      default:
+        return `<span class="batch-status-badge status-pending">⏳ Siap</span>`;
     }
-    formData.append('method', selectEngine.value);
-    formData.append('sensitivity', sensitivityInput.value);
-    formData.append('dilation_px', dilationInput.value);
+  }
 
-    try {
-      const res = await fetch(`${apiBaseUrl}/api/batch`, {
-        method: 'POST',
-        body: formData
-      });
-      const data = await res.json();
+  function getRowActionHtml(item) {
+    if (item.status === 'completed' && item.downloadUrl) {
+      return `<a href="${item.downloadUrl}" download="cleaned_${item.filename}" class="btn-row-action btn-row-download" title="Unduh foto ini">⬇️ Unduh</a>`;
+    }
+    if (item.status === 'processing') {
+      return `<span style="font-size:0.75rem; color:var(--accent-secondary); font-family:var(--font-mono);">⚡ Aktif</span>`;
+    }
+    return `<button class="btn-row-action btn-row-delete" onclick="window.removeBatchItem('${item.id}')" title="Hapus dari antrean">✕</button>`;
+  }
 
-      if (data.status === 'ok') {
-        currentBatchId = data.batch_id;
-        btnBatchDownloadAll.style.display = 'inline-flex';
+  function renderBatchList() {
+    if (batchTotalCountBadge) {
+      batchTotalCountBadge.textContent = `${batchQueue.length} Foto`;
+    }
 
-        data.items.forEach(item => {
-          const card = document.createElement('div');
-          card.className = 'batch-card';
-          card.innerHTML = `
-            <img class="batch-thumb" src="${item.thumb}" alt="${item.filename}">
-            <div class="batch-info">
-              <div style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${item.filename}</div>
-              <div style="color:var(--success); font-size:0.75rem; margin-top:4px;">Cleaned in ${item.elapsed_sec}s</div>
+    if (batchQueue.length === 0) {
+      if (batchControlsCard) batchControlsCard.style.display = 'none';
+      if (batchListContainer) batchListContainer.style.display = 'none';
+      if (batchGlobalProgressCard) batchGlobalProgressCard.style.display = 'none';
+      if (btnBatchDownloadAll) btnBatchDownloadAll.style.display = 'none';
+      if (batchListBody) batchListBody.innerHTML = '';
+      return;
+    }
+
+    if (batchControlsCard) batchControlsCard.style.display = 'flex';
+    if (batchListContainer) batchListContainer.style.display = 'block';
+
+    if (!batchListBody) return;
+    batchListBody.innerHTML = '';
+
+    batchQueue.forEach((item) => {
+      const row = document.createElement('div');
+      row.className = `batch-row ${item.status === 'processing' ? 'is-processing' : ''} ${item.status === 'completed' ? 'is-completed' : ''} ${item.status === 'error' ? 'is-error' : ''}`;
+      row.id = `row-${item.id}`;
+
+      row.innerHTML = `
+        <div class="batch-col col-preview">
+          <div class="batch-row-thumb-wrap">
+            <img src="${item.thumb || item.previewUrl}" class="batch-row-thumb" alt="${item.filename}">
+            ${item.status === 'completed' ? '<span class="batch-thumb-check">✓</span>' : ''}
+          </div>
+        </div>
+        <div class="batch-col col-filename">
+          <div class="batch-row-name" title="${item.filename}">${item.filename}</div>
+          <div class="batch-row-meta">${formatBytes(item.size)}</div>
+        </div>
+        <div class="batch-col col-progress">
+          <div class="batch-row-progress-wrap">
+            <div class="batch-row-progress-track">
+              <div class="batch-row-progress-bar" id="bar-${item.id}" style="width: ${item.progress}%;"></div>
             </div>
-          `;
-          batchGrid.appendChild(card);
-        });
+            <span class="batch-row-percent" id="pct-${item.id}">${item.progress}%</span>
+          </div>
+        </div>
+        <div class="batch-col col-status" id="status-cell-${item.id}">
+          ${getStatusBadgeHtml(item)}
+        </div>
+        <div class="batch-col col-actions" id="actions-cell-${item.id}">
+          ${getRowActionHtml(item)}
+        </div>
+      `;
+
+      batchListBody.appendChild(row);
+    });
+  }
+
+  function addFilesToBatch(files) {
+    if (!files || files.length === 0) return;
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (!file.type.startsWith('image/')) continue;
+      const item = {
+        id: 'item_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+        file: file,
+        filename: file.name,
+        size: file.size,
+        previewUrl: URL.createObjectURL(file),
+        status: 'pending',
+        progress: 0,
+        elapsedSec: null,
+        thumb: null,
+        downloadUrl: null
+      };
+      batchQueue.push(item);
+    }
+    renderBatchList();
+  }
+
+  // Window helper for row removal
+  window.removeBatchItem = function(id) {
+    if (isBatchRunning) return;
+    const idx = batchQueue.findIndex(it => it.id === id);
+    if (idx !== -1) {
+      if (batchQueue[idx].previewUrl) URL.revokeObjectURL(batchQueue[idx].previewUrl);
+      batchQueue.splice(idx, 1);
+      renderBatchList();
+    }
+  };
+
+  // Batch Dropzone Event Listeners
+  if (batchDropzone) {
+    batchDropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      batchDropzone.classList.add('dragover');
+    });
+    batchDropzone.addEventListener('dragleave', () => batchDropzone.classList.remove('dragover'));
+    batchDropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      batchDropzone.classList.remove('dragover');
+      if (e.dataTransfer.files) {
+        addFilesToBatch(e.dataTransfer.files);
       }
-      hideLoading();
-    } catch (err) {
-      alert("Batch error: " + err);
-      hideLoading();
-    }
-  });
+    });
+  }
 
-  btnBatchDownloadAll.addEventListener('click', async () => {
-    if (!currentBatchId) return;
+  // Batch File Input (NO auto processing, just queue)
+  if (batchFileInput) {
+    batchFileInput.addEventListener('change', (e) => {
+      if (e.target.files) {
+        addFilesToBatch(e.target.files);
+      }
+      batchFileInput.value = '';
+    });
+  }
 
-    const originalText = btnBatchDownloadAll.innerHTML;
-    btnBatchDownloadAll.innerHTML = `<span>⏳ Downloading ZIP...</span>`;
-    btnBatchDownloadAll.disabled = true;
+  // Clear Batch Queue Button
+  if (btnClearBatchQueue) {
+    btnClearBatchQueue.addEventListener('click', () => {
+      if (isBatchRunning) return;
+      batchQueue.forEach(it => {
+        if (it.previewUrl) URL.revokeObjectURL(it.previewUrl);
+      });
+      batchQueue = [];
+      currentBatchId = null;
+      renderBatchList();
+    });
+  }
 
-    try {
-      const downloadUrl = `${apiBaseUrl}/api/download-batch/${currentBatchId}`;
-      const response = await fetch(downloadUrl);
-      if (!response.ok) throw new Error("Gagal mengunduh ZIP dari server (" + response.status + ")");
+  // Manual Start Batch Button (proses satu persatu secara berurutan)
+  if (btnStartBatch) {
+    btnStartBatch.addEventListener('click', async () => {
+      if (isBatchRunning) return;
+      const pendingItems = batchQueue.filter(it => it.status !== 'completed');
+      if (pendingItems.length === 0) {
+        alert("Semua foto dalam antrean sudah selesai diproses. Tambahkan foto baru untuk melanjutkan.");
+        return;
+      }
 
-      const blob = await response.blob();
-      const blobUrl = window.URL.createObjectURL(blob);
+      isBatchRunning = true;
+      currentBatchId = 'batch_' + Date.now();
 
-      const a = document.createElement('a');
-      a.href = blobUrl;
-      a.download = `${currentBatchId}.zip`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(blobUrl);
-    } catch (err) {
-      console.warn("Direct blob download notice, fallback to standard link:", err);
-      window.location.href = `${apiBaseUrl}/api/download-batch/${currentBatchId}`;
-    } finally {
-      btnBatchDownloadAll.innerHTML = originalText;
-      btnBatchDownloadAll.disabled = false;
-    }
-  });
+      // UI state during processing
+      btnStartBatch.disabled = true;
+      if (btnAddMoreBatch) btnAddMoreBatch.disabled = true;
+      if (btnClearBatchQueue) btnClearBatchQueue.disabled = true;
+      if (batchWmModeSelect) batchWmModeSelect.disabled = true;
+      if (batchEngineSelect) batchEngineSelect.disabled = true;
+      btnStartBatch.innerHTML = `<span class="pulse-dot"></span><span>Memproses Antrean...</span>`;
+
+      if (batchGlobalProgressCard) batchGlobalProgressCard.style.display = 'block';
+
+      const totalItems = pendingItems.length;
+      let completedCount = 0;
+      const globalStartT = performance.now();
+
+      const globalTimerInterval = setInterval(() => {
+        const elapsedSec = ((performance.now() - globalStartT) / 1000).toFixed(1);
+        if (batchGlobalTimer) batchGlobalTimer.textContent = `${elapsedSec}s`;
+      }, 100);
+
+      // Process each file sequentially
+      for (let i = 0; i < pendingItems.length; i++) {
+        const item = pendingItems[i];
+        item.status = 'processing';
+        item.progress = 12;
+
+        const rowEl = document.getElementById(`row-${item.id}`);
+        const barEl = document.getElementById(`bar-${item.id}`);
+        const pctEl = document.getElementById(`pct-${item.id}`);
+        const statusCell = document.getElementById(`status-cell-${item.id}`);
+        const actionsCell = document.getElementById(`actions-cell-${item.id}`);
+
+        if (rowEl) {
+          rowEl.className = 'batch-row is-processing';
+          rowEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+        if (statusCell) statusCell.innerHTML = getStatusBadgeHtml(item);
+        if (actionsCell) actionsCell.innerHTML = getRowActionHtml(item);
+        if (barEl) barEl.style.width = '12%';
+        if (pctEl) pctEl.textContent = '12%';
+
+        // Smooth progress animation ticker for this item
+        let curItemProg = 12;
+        const itemTicker = setInterval(() => {
+          if (curItemProg < 88) {
+            curItemProg += Math.max(1, (88 - curItemProg) * 0.12);
+            const rProg = Math.round(curItemProg);
+            if (barEl) barEl.style.width = `${rProg}%`;
+            if (pctEl) pctEl.textContent = `${rProg}%`;
+          }
+        }, 120);
+
+        // Prepare request
+        const formData = new FormData();
+        formData.append('files', item.file);
+        formData.append('batch_id', currentBatchId);
+        formData.append('method', batchEngineSelect ? batchEngineSelect.value : (selectEngine ? selectEngine.value : 'auto'));
+        formData.append('wm_mode', batchWmModeSelect ? batchWmModeSelect.value : (selectWmMode ? selectWmMode.value : 'auto'));
+        formData.append('sensitivity', sensitivityInput ? sensitivityInput.value : '0.5');
+        formData.append('dilation_px', dilationInput ? dilationInput.value : '2');
+
+        try {
+          const res = await fetch(`${apiBaseUrl}/api/batch`, {
+            method: 'POST',
+            body: formData
+          });
+          const data = await res.json();
+          clearInterval(itemTicker);
+
+          if (data.status === 'ok' && data.items && data.items.length > 0) {
+            const outItem = data.items[0];
+            item.status = 'completed';
+            item.progress = 100;
+            item.elapsedSec = outItem.elapsed_sec;
+            item.thumb = outItem.thumb;
+            item.downloadUrl = outItem.download_url ? `${apiBaseUrl}${outItem.download_url}` : null;
+
+            if (rowEl) rowEl.className = 'batch-row is-completed';
+            if (barEl) barEl.style.width = '100%';
+            if (pctEl) pctEl.textContent = '100%';
+            if (statusCell) statusCell.innerHTML = getStatusBadgeHtml(item);
+            if (actionsCell) actionsCell.innerHTML = getRowActionHtml(item);
+
+            // Update row thumbnail to cleaned image
+            const thumbImg = rowEl ? rowEl.querySelector('.batch-row-thumb') : null;
+            if (thumbImg && item.thumb) thumbImg.src = item.thumb;
+            const thumbWrap = rowEl ? rowEl.querySelector('.batch-row-thumb-wrap') : null;
+            if (thumbWrap && !thumbWrap.querySelector('.batch-thumb-check')) {
+              const checkBadge = document.createElement('span');
+              checkBadge.className = 'batch-thumb-check';
+              checkBadge.textContent = '✓';
+              thumbWrap.appendChild(checkBadge);
+            }
+
+            completedCount++;
+          } else {
+            throw new Error(data.error || "Gagal memproses gambar");
+          }
+        } catch (err) {
+          clearInterval(itemTicker);
+          item.status = 'error';
+          item.progress = 100;
+          if (rowEl) rowEl.className = 'batch-row is-error';
+          if (barEl) barEl.style.width = '100%';
+          if (pctEl) pctEl.textContent = '100%';
+          if (statusCell) statusCell.innerHTML = getStatusBadgeHtml(item);
+          if (actionsCell) actionsCell.innerHTML = getRowActionHtml(item);
+          console.error("Batch item error:", err);
+        }
+
+        // Update global progress bar & text
+        const overallPct = Math.round(((i + 1) / totalItems) * 100);
+        if (batchGlobalProgressFill) batchGlobalProgressFill.style.width = `${overallPct}%`;
+        if (batchGlobalStatusText) {
+          batchGlobalStatusText.textContent = `Memproses: ${completedCount} dari ${totalItems} foto selesai (${overallPct}%)`;
+        }
+      }
+
+      // Finish batch run
+      clearInterval(globalTimerInterval);
+      const totalElapsed = ((performance.now() - globalStartT) / 1000).toFixed(1);
+
+      isBatchRunning = false;
+      btnStartBatch.disabled = false;
+      if (btnAddMoreBatch) btnAddMoreBatch.disabled = false;
+      if (btnClearBatchQueue) btnClearBatchQueue.disabled = false;
+      if (batchWmModeSelect) batchWmModeSelect.disabled = false;
+      if (batchEngineSelect) batchEngineSelect.disabled = false;
+
+      btnStartBatch.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        <span>Mulai Proses Lagi</span>
+      `;
+
+      if (completedCount > 0 && btnBatchDownloadAll) {
+        btnBatchDownloadAll.style.display = 'inline-flex';
+      }
+
+      if (batchGlobalStatusText) {
+        batchGlobalStatusText.textContent = `✅ Selesai! ${completedCount} foto berhasil dibersihkan (${totalElapsed}s)`;
+      }
+    });
+  }
+
+  // ZIP Download for Batch
+  if (btnBatchDownloadAll) {
+    btnBatchDownloadAll.addEventListener('click', async () => {
+      if (!currentBatchId) return;
+
+      const originalText = btnBatchDownloadAll.innerHTML;
+      btnBatchDownloadAll.innerHTML = `<span>⏳ Mengunduh ZIP...</span>`;
+      btnBatchDownloadAll.disabled = true;
+
+      try {
+        const downloadUrl = `${apiBaseUrl}/api/download-batch/${currentBatchId}`;
+        const response = await fetch(downloadUrl);
+        if (!response.ok) throw new Error("Gagal mengunduh ZIP dari server (" + response.status + ")");
+
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = `${currentBatchId}.zip`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(blobUrl);
+      } catch (err) {
+        console.warn("Direct blob download notice, fallback to standard link:", err);
+        window.location.href = `${apiBaseUrl}/api/download-batch/${currentBatchId}`;
+      } finally {
+        btnBatchDownloadAll.innerHTML = originalText;
+        btnBatchDownloadAll.disabled = false;
+      }
+    });
+  }
 
   // ----------------------------------------------------
   // Dynamic Real-Time Progress & Heartbeat Controller

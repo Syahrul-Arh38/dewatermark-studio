@@ -27,6 +27,10 @@ samples/*
 !samples/.gitkeep
 !samples/demo_sample.jpg
 !samples/watermark_sample.jpg
+!samples/wm_bulat_besar.png
+!samples/wm_rfans_channel_*.png
+!samples/sakerly*.png
+!samples/rfans_samples/**
 
 # OS specific
 .DS_Store

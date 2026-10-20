@@ -26,6 +26,7 @@ class WatermarkPipeline:
         use_heuristics: bool = True,
         sensitivity: float = 0.5,
         dilation_px: int = 2,
+        wm_mode: str = "auto",
         inpaint_method: str = "auto",
         feather_edges: bool = True
     ) -> Dict[str, Any]:
@@ -46,6 +47,7 @@ class WatermarkPipeline:
         else:
             det_res = self.detector.detect(
                 img_bgr=img_bgr,
+                wm_mode=wm_mode,
                 use_ocr=use_ocr,
                 use_heuristics=use_heuristics,
                 sensitivity=sensitivity,

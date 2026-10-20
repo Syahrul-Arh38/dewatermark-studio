@@ -84,6 +84,18 @@
           
           <div class="control-group">
             <div class="label-row">
+              <label for="selectWmMode">Watermark Target Mode</label>
+            </div>
+            <select id="selectWmMode" class="custom-select" style="margin-top: 4px;">
+              <option value="auto">🌐 Auto Scan (Universal / Semua)</option>
+              <option value="sakerly">🔴 Sakerly (Fixed Signature)</option>
+              <option value="rfans">⚪ RFans (4-Corner Stamp & Text)</option>
+            </select>
+            <small id="wmModeHint" style="color: var(--text-muted); font-size: 0.72rem; display: block; margin-top: 4px;">Pilih Sakerly untuk deteksi tanda tangan instan di sudut foto.</small>
+          </div>
+
+          <div class="control-group">
+            <div class="label-row">
               <label for="sensitivity">Sensitivity</label>
               <span id="sensitivityVal" class="val-badge">0.50</span>
             </div>
@@ -211,11 +223,17 @@
             <div class="toolbar-divider"></div>
 
             <div class="canvas-actions">
-              <button id="btnClearMask" class="icon-btn" title="Clear Mask">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              <button id="btnClearMask" class="btn-toolbar" title="Bersihkan Goresan Mask Merah">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.375 2.625a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.375-9.375z"/><line x1="16" y1="5" x2="19" y2="8"/></svg>
+                <span>Hapus Mask</span>
               </button>
-              <button id="btnZoomFit" class="icon-btn" title="Fit to Screen">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+              <button id="btnZoomFit" class="btn-toolbar" title="Sesuaikan Ukuran (Fit to Viewport)">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+                <span>Fit</span>
+              </button>
+              <button id="btnResetImage" class="btn-toolbar btn-toolbar-danger" title="Hapus foto saat ini dan pilih foto baru">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                <span>Hapus Foto</span>
               </button>
             </div>
           </div>
@@ -333,28 +351,100 @@
       </aside>
     </main>
 
-    <!-- Batch Processing Modal / View -->
+    <!-- Batch Processing View -->
     <section class="batch-view" id="batchView" style="display: none;">
       <div class="batch-header">
         <div>
-          <h2>Batch Watermark Cleaner</h2>
-          <p>Drop multiple photos or a whole album to clean in high-speed parallel batches.</p>
+          <div class="batch-header-title-row">
+            <h2>Batch Watermark Cleaner</h2>
+            <span class="batch-counter-badge" id="batchTotalCountBadge">0 Foto</span>
+          </div>
+          <p>Bersihkan seluruh album foto sekaligus secara berurutan dengan pemantauan progress real-time tiap gambar.</p>
         </div>
-        <button id="btnBatchDownloadAll" class="btn btn-success" style="display: none;">
-          Download All as ZIP
-        </button>
+        <div class="batch-header-actions">
+          <button id="btnBatchDownloadAll" class="btn btn-success glow-btn" style="display: none;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Download Semua (ZIP)
+          </button>
+        </div>
       </div>
 
+      <!-- Batch Dropzone Area -->
       <div class="batch-dropzone" id="batchDropzone">
         <input type="file" id="batchFileInput" multiple accept="image/*" class="file-input-hidden">
-        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
-        <p>Drop folder or select multiple images to batch process</p>
+        <div class="batch-drop-icon">
+          <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+        </div>
+        <h3>Tarik & Letakkan Banyak Foto Sekaligus di Sini</h3>
+        <p>Mendukung puluhan hingga ratusan foto (JPG, PNG, WEBP) • Resolusi asli tetap terjaga</p>
         <button class="btn btn-secondary" onclick="document.getElementById('batchFileInput').click()">
-          Select Multiple Images
+          📁 Pilih Foto dari Komputer
         </button>
       </div>
 
-      <div class="batch-grid" id="batchGrid"></div>
+      <!-- Batch Controls & Config Card (Visible when items are in queue) -->
+      <div class="batch-controls-card" id="batchControlsCard" style="display: none;">
+        <div class="batch-controls-left">
+          <div class="batch-control-field">
+            <label for="batchWmModeSelect">Target Watermark:</label>
+            <select id="batchWmModeSelect" class="custom-select-sm">
+              <option value="auto">🌐 Auto Scan (Universal)</option>
+              <option value="sakerly">🔴 Sakerly (Fixed Signature)</option>
+              <option value="rfans">⚪ RFans (4-Corner Stamp & Text)</option>
+            </select>
+          </div>
+          <div class="batch-control-field">
+            <label for="batchEngineSelect">Engine:</label>
+            <select id="batchEngineSelect" class="custom-select-sm">
+              <option value="auto">✨ Auto Neural (LaMa / Edge)</option>
+              <option value="edge_guided">⚡ Fast Edge-Guided</option>
+              <option value="navier_stokes">🌊 Navier-Stokes</option>
+              <option value="fast_telea">🚀 Fast Telea</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="batch-controls-right">
+          <button id="btnAddMoreBatch" class="btn btn-sm btn-secondary" onclick="document.getElementById('batchFileInput').click()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Tambah Foto
+          </button>
+          <button id="btnClearBatchQueue" class="btn btn-sm btn-danger-soft">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            Kosongkan
+          </button>
+          <button id="btnStartBatch" class="btn btn-primary glow-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            <span>Mulai Proses Batch</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Global Batch Progress Bar -->
+      <div class="batch-global-progress-card" id="batchGlobalProgressCard" style="display: none;">
+        <div class="batch-global-progress-header">
+          <div class="batch-global-title">
+            <span class="pulse-dot"></span>
+            <span id="batchGlobalStatusText">Memproses: 0 dari 0 foto selesai (0%)</span>
+          </div>
+          <span class="batch-global-timer" id="batchGlobalTimer">0.0s</span>
+        </div>
+        <div class="batch-global-progress-track">
+          <div class="batch-global-progress-fill" id="batchGlobalProgressFill" style="width: 0%;"></div>
+        </div>
+      </div>
+
+      <!-- Vertical List of Images (baris ke bawah) -->
+      <div class="batch-list-container" id="batchListContainer" style="display: none;">
+        <div class="batch-list-header">
+          <div class="batch-col col-preview">PREVIEW</div>
+          <div class="batch-col col-filename">NAMA FOTO & UKURAN</div>
+          <div class="batch-col col-progress">PROGRES PROSES</div>
+          <div class="batch-col col-status">STATUS</div>
+          <div class="batch-col col-actions">AKSI</div>
+        </div>
+        <div class="batch-list-body" id="batchListBody"></div>
+      </div>
     </section>
   </div>
 
