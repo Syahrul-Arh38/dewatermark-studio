@@ -248,7 +248,9 @@ notebook_content = {
                 '\n',
                 'Akselerasi GPU Cloud untuk **SimpleLaMa Neural Inpainting** dan Pembersihan Watermark Presisi Tinggi.\n',
                 '\n',
-                '### ⚡ UPDATE TERBARU (Sakerly & RFans Master Clean Precision):\n',
+                '### ⚡ UPDATE TERBARU (Sakerly, RFans Precision & Unified Batch Download):\n',
+                '- **Batch Download & Unified ZIP**: Seluruh hasil proses batch otomatis disimpan di folder `/content/cleaned_photos/` di Google Colab dan disatukan ke dalam **1 file ZIP tunggal** (`/content/cleaned_batch_latest.zip` & `/content/{batch_id}.zip`). Tidak ada lagi file ZIP yang terpisah-pisah!\n',
+                '- **Anti-Gagal Download**: Web Studio kini dilengkapi tombol unduh per-foto (`⬇️ Unduh`) langsung dari memori browser, serta tombol `Download Semua (ZIP)` menggunakan client-side JSZip instan dan server fallback.\n',
                 '- **Stempel Bulat RFans**: 100% menggunakan master template bersih `wm_bulat_besar.png` (stroke-level 1-2px, anti-blobs, tekstur karpet & sepatu tetap 100% utuh tanpa kabut buram).\n',
                 '- **Sakerly Signature**: Full-image pyramid search untuk tanda tangan coral-red `t.me/Sakerly` di mana saja (kacamata hitam, rambut, baju, sudut) dalam <20ms.\n',
                 '- **Anti-Solid Box**: Poligon balok solid OCR telah dihapus total. Area stempel bulat dilindungi dari poligon OCR.\n',
@@ -281,6 +283,44 @@ notebook_content = {
             'metadata': {},
             'outputs': [],
             'source': [line + '\n' for line in server_code.splitlines()]
+        },
+        {
+            'cell_type': 'markdown',
+            'metadata': {},
+            'source': [
+                '---\n',
+                '### 📥 [FITUR BARU] Cek Folder Hasil Foto & Unduh ZIP Langsung dari Colab (Opsional)\n',
+                'Semua foto yang telah dibersihkan oleh server otomatis disimpan di disk Colab `/content/cleaned_photos/` dan disatukan ke dalam satu file ZIP `/content/cleaned_batch_latest.zip`.\n',
+                'Anda dapat menjalankan cell di bawah ini kapan saja untuk melihat file atau mengunduh langsung dari Colab:\n'
+            ]
+        },
+        {
+            'cell_type': 'code',
+            'execution_count': None,
+            'metadata': {},
+            'outputs': [],
+            'source': [
+                '# CELL 3: Cek Folder Foto Bersih & Unduh ZIP Tunggal Langsung dari Colab\n',
+                'import os\n',
+                'from google.colab import files\n',
+                '\n',
+                'print("=" * 65)\n',
+                'print("📁 FOLDER PENYIMPANAN COLAB: /content/cleaned_photos")\n',
+                'print("=" * 65)\n',
+                'if os.path.exists("/content/cleaned_photos"):\n',
+                '    items = os.listdir("/content/cleaned_photos")\n',
+                '    print(f"Total file tersimpan: {len(items)} file")\n',
+                '    !ls -lh /content/cleaned_photos\n',
+                'else:\n',
+                '    print("Belum ada foto yang diproses. Silakan jalankan batch dari Web Studio.")\n',
+                '\n',
+                '# Unduh ZIP Tunggal Gabungan Hasil Batch Terbaru\n',
+                'if os.path.exists("/content/cleaned_batch_latest.zip"):\n',
+                '    print("\\n⬇️ Mengunduh 1 file ZIP gabungan batch terbaru ke komputer Anda...")\n',
+                '    files.download("/content/cleaned_batch_latest.zip")\n',
+                'else:\n',
+                '    print("\\n💡 Tip: Jalankan proses Batch di Web Studio terlebih dahulu untuk men-generate file ZIP.")\n'
+            ]
         },
         {
             'cell_type': 'markdown',
