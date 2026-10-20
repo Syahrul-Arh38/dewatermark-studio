@@ -110,9 +110,8 @@ _stamp_bytes = base64.b64decode(B64_STAMP_TEMPLATE)
 _stamp_raw = cv2.imdecode(np.frombuffer(_stamp_bytes, np.uint8), cv2.IMREAD_UNCHANGED)
 if len(_stamp_raw.shape) == 3 and _stamp_raw.shape[2] == 4:
     STAMP_ALPHA = _stamp_raw[:, :, 3]
-    _st_mask = (STAMP_ALPHA > 30).astype(np.uint8) * 255
     k5 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-    STAMP_TOPHAT = cv2.morphologyEx(_st_mask, cv2.MORPH_TOPHAT, k5)
+    STAMP_TOPHAT = cv2.morphologyEx(STAMP_ALPHA, cv2.MORPH_TOPHAT, k5)
 else:
     STAMP_ALPHA = _stamp_raw
     k5 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
@@ -205,7 +204,7 @@ def detect_sakerly(img_bgr, threshold=0.28, dilation_px=2):
     return mask, best_score, best_match
 
 
-def detect_stamp_dynamic(img_bgr, threshold=0.22, dilation_px=2):
+def detect_stamp_dynamic(img_bgr, threshold=0.16, dilation_px=2):
     """
     Pencarian stempel RFans 100% DINAMIS di 4 Sudut (Top-Left, Top-Right, Bottom-Left, Bottom-Right):
     - Multi-Aspect & Multi-Scale: Otomatis beradaptasi pada foto Portrait, Landscape, maupun Web Resolution.
@@ -233,8 +232,8 @@ def detect_stamp_dynamic(img_bgr, threshold=0.22, dilation_px=2):
     long_dim = max(w, h)
     s_short = (short_dim * 0.245) / float(th_w)
 
-    # Phase 1: Uji cepat skala relatif sisi pendek (standar untuk Portrait & Landscape)
-    primary_scales = list(np.linspace(s_short * 0.88, s_short * 1.12, 7))
+    # Phase 1: Uji cepat skala relatif sisi pendek (standar untuk Portrait & Landscape, 11 steps)
+    primary_scales = list(np.linspace(s_short * 0.85, s_short * 1.15, 11))
 
     best_score = -1.0
     best_match = None
@@ -357,8 +356,8 @@ def generate_watermark_mask(img_bgr, wm_mode='auto', dilation_px=2):
     # =========================================================================
     stamp_bbox = None
     if mode in ['rfans', 'auto']:
-        stamp_mask, stamp_score, stamp_match = detect_stamp_dynamic(img_bgr, threshold=0.22, dilation_px=dilation_px)
-        if stamp_score >= 0.22:
+        stamp_mask, stamp_score, stamp_match = detect_stamp_dynamic(img_bgr, threshold=0.16, dilation_px=dilation_px)
+        if stamp_score >= 0.16:
             mask = cv2.bitwise_or(mask, stamp_mask)
             stamp_bbox = stamp_match
 
@@ -532,10 +531,12 @@ def api_detect():
     wm_mode = str(data.get('wm_mode', 'auto'))
     mask = generate_watermark_mask(img, wm_mode=wm_mode, dilation_px=dilation_px)
     mask_bgr = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
+    nz = int(np.count_nonzero(mask))
     return jsonify({
         'status': 'ok',
         'mask': bgr_to_base64(mask_bgr, 'png'),
-        'pixels_masked': int(np.count_nonzero(mask))
+        'pixels_masked': nz,
+        'stamp_count': 1 if nz > 0 else 0
     })
 
 
@@ -547,20 +548,25 @@ def api_inpaint():
     wm_mode = str(data.get('wm_mode', 'auto'))
 
     mask_b64 = data.get('mask')
+    mask = None
     if mask_b64:
         if ',' in mask_b64:
             mask_b64 = mask_b64.split(',', 1)[1]
         raw_mask = cv2.imdecode(np.frombuffer(base64.b64decode(mask_b64), np.uint8), cv2.IMREAD_UNCHANGED)
-        if len(raw_mask.shape) == 3 and raw_mask.shape[2] == 4:
-            mask = raw_mask[:, :, 3]
-        elif len(raw_mask.shape) == 3:
-            mask = cv2.cvtColor(raw_mask, cv2.COLOR_BGR2GRAY)
-        else:
-            mask = raw_mask
-        if mask.shape != (h, w):
-            mask = cv2.resize(mask, (w, h), interpolation=cv2.INTER_NEAREST)
-        _, mask = cv2.threshold(mask, 10, 255, cv2.THRESH_BINARY)
-    else:
+        if raw_mask is not None:
+            if len(raw_mask.shape) == 3 and raw_mask.shape[2] == 4:
+                m_cand = raw_mask[:, :, 3]
+            elif len(raw_mask.shape) == 3:
+                m_cand = cv2.cvtColor(raw_mask, cv2.COLOR_BGR2GRAY)
+            else:
+                m_cand = raw_mask
+            if m_cand.shape != (h, w):
+                m_cand = cv2.resize(m_cand, (w, h), interpolation=cv2.INTER_NEAREST)
+            _, m_cand = cv2.threshold(m_cand, 10, 255, cv2.THRESH_BINARY)
+            if np.count_nonzero(m_cand) > 0:
+                mask = m_cand
+
+    if mask is None or np.count_nonzero(mask) == 0:
         mask = generate_watermark_mask(img_bgr, wm_mode=wm_mode)
 
     start_t = time.time()

@@ -301,9 +301,8 @@ def get_rfans_stamp_template() -> Tuple[np.ndarray, np.ndarray]:
         big = cv2.imread(p, cv2.IMREAD_UNCHANGED)
         if big is not None and len(big.shape) == 3 and big.shape[2] == 4:
             a = big[:, :, 3]
-            t_mask = (a > 30).astype(np.uint8) * 255
             k5 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-            t_top = cv2.morphologyEx(t_mask, cv2.MORPH_TOPHAT, k5)
+            t_top = cv2.morphologyEx(a, cv2.MORPH_TOPHAT, k5)
             return t_top, a
 
     k5 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
@@ -313,7 +312,7 @@ def get_rfans_stamp_template() -> Tuple[np.ndarray, np.ndarray]:
 
 def detect_stamp_dynamic(
     img_bgr: np.ndarray,
-    threshold: float = 0.22,
+    threshold: float = 0.16,
     corner_only: bool = True,
     dilation_px: int = 2
 ) -> Tuple[np.ndarray, float, Optional[Tuple[int, int, int, int]]]:
@@ -346,8 +345,8 @@ def detect_stamp_dynamic(
     long_dim = max(w, h)
     s_short = (short_dim * 0.245) / float(th_w)
 
-    # Phase 1: Uji cepat skala relatif sisi pendek (standar untuk Portrait & Landscape)
-    primary_scales = list(np.linspace(s_short * 0.88, s_short * 1.12, 7))
+    # Phase 1: Uji cepat skala relatif sisi pendek (standar untuk Portrait & Landscape, 11 steps)
+    primary_scales = list(np.linspace(s_short * 0.85, s_short * 1.15, 11))
 
     best_score = -1.0
     best_match = None
@@ -508,7 +507,7 @@ class WatermarkDetector:
         # =========================================================================
         stamp_bbox = None
         if mode in ['rfans', 'auto']:
-            stamp_thresh = 0.22 * (1.1 - sensitivity * 0.2)
+            stamp_thresh = 0.16 * (1.1 - sensitivity * 0.2)
             stamp_mask, stamp_score, stamp_match = detect_stamp_dynamic(
                 img_bgr,
                 threshold=stamp_thresh,

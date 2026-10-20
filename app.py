@@ -131,11 +131,15 @@ def api_inpaint():
     img_bgr = base64_to_bgr(image_b64)
     h, w = img_bgr.shape[:2]
 
+    wm_mode = str(data.get('wm_mode', 'auto'))
+    mask = None
     if mask_b64:
-        mask = base64_to_mask(mask_b64, (h, w))
-    else:
-        # Fallback to auto detection if mask was not supplied
-        det_res = pipeline.detector.detect(img_bgr)
+        cand_mask = base64_to_mask(mask_b64, (h, w))
+        if cand_mask is not None and np.count_nonzero(cand_mask) > 0:
+            mask = cand_mask
+
+    if mask is None or np.count_nonzero(mask) == 0:
+        det_res = pipeline.detector.detect(img_bgr, wm_mode=wm_mode)
         mask = det_res['mask']
 
     method = data.get('method', 'auto')

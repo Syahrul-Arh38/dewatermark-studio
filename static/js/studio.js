@@ -624,6 +624,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const payload = {
         image: originalBase64,
         mask: maskDataUrl,
+        wm_mode: wmMode,
         method: selectEngine.value,
         feather: checkFeather.checked
       };
