@@ -205,11 +205,12 @@ def detect_sakerly(img_bgr, threshold=0.28, dilation_px=2):
     return mask, best_score, best_match
 
 
-def detect_stamp_dynamic(img_bgr, threshold=0.34, dilation_px=2):
+def detect_stamp_dynamic(img_bgr, threshold=0.22, dilation_px=2):
     """
     Pencarian stempel RFans 100% DINAMIS di 4 Sudut (Top-Left, Top-Right, Bottom-Left, Bottom-Right):
+    - Multi-Aspect & Multi-Scale: Otomatis beradaptasi pada foto Portrait, Landscape, maupun Web Resolution.
     - Menggunakan master template beresolusi tinggi (wm_bulat_besar.png).
-    - Memindai area sudut 35% lebar & tinggi.
+    - Memindai area sudut 38% lebar & tinggi.
     - Menghasilkan HANYA guratan garis stempel halus (1-2px dilation), TANPA merusak karpet / sepatu.
     """
     h, w = img_bgr.shape[:2]
@@ -220,7 +221,7 @@ def detect_stamp_dynamic(img_bgr, threshold=0.34, dilation_px=2):
     k5 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
     top_img = cv2.morphologyEx(gray, cv2.MORPH_TOPHAT, k5)
 
-    cw, ch = int(w * 0.35), int(h * 0.35)
+    cw, ch = int(w * 0.38), int(h * 0.38)
     corners = [
         ('TR', w - cw, 0, w, ch),
         ('BR', w - cw, h - ch, w, h),
@@ -228,15 +229,19 @@ def detect_stamp_dynamic(img_bgr, threshold=0.34, dilation_px=2):
         ('BL', 0, h - ch, cw, h),
     ]
 
-    base_scale = (w * 0.245) / float(th_w)
-    scales = np.linspace(base_scale * 0.88, base_scale * 1.12, 7)
+    short_dim = min(w, h)
+    long_dim = max(w, h)
+    s_short = (short_dim * 0.245) / float(th_w)
+
+    # Phase 1: Uji cepat skala relatif sisi pendek (standar untuk Portrait & Landscape)
+    primary_scales = list(np.linspace(s_short * 0.88, s_short * 1.12, 7))
 
     best_score = -1.0
     best_match = None
 
     for c_name, cx1, cy1, cx2, cy2 in corners:
         c_roi = top_img[cy1:cy2, cx1:cx2]
-        for s in scales:
+        for s in primary_scales:
             sw = int(round(th_w * s))
             sh = int(round(th_h * s))
             if sw >= c_roi.shape[1] or sh >= c_roi.shape[0]:
@@ -247,16 +252,45 @@ def detect_stamp_dynamic(img_bgr, threshold=0.34, dilation_px=2):
             if max_v > best_score:
                 best_score = float(max_v)
                 best_match = (cx1 + max_l[0], cy1 + max_l[1], sw, sh)
-                if best_score > 0.65:
+                if best_score > 0.60:
                     break
-        if best_score > 0.65:
+        if best_score > 0.60:
             break
 
-    # Fallback to downscaled scan if not found in standard corners
+    # Phase 2: Jika belum ketemu dengan confidence tinggi, uji skala sekunder (sisi panjang & web resolution)
+    if best_score < 0.38:
+        secondary_scales = []
+        if long_dim > short_dim * 1.15:
+            s_long = (long_dim * 0.245) / float(th_w)
+            secondary_scales.extend(list(np.linspace(s_long * 0.88, s_long * 1.12, 5)))
+        for fixed_px in [240, 320, 620]:
+            s_fix = fixed_px / float(th_w)
+            if not any(abs(s_fix - sc) < 0.05 for sc in primary_scales + secondary_scales):
+                secondary_scales.append(s_fix)
+
+        for c_name, cx1, cy1, cx2, cy2 in corners:
+            c_roi = top_img[cy1:cy2, cx1:cx2]
+            for s in secondary_scales:
+                sw = int(round(th_w * s))
+                sh = int(round(th_h * s))
+                if sw >= c_roi.shape[1] or sh >= c_roi.shape[0]:
+                    continue
+                st = cv2.resize(STAMP_TOPHAT, (sw, sh))
+                res = cv2.matchTemplate(c_roi, st, cv2.TM_CCOEFF_NORMED)
+                _, max_v, _, max_l = cv2.minMaxLoc(res)
+                if max_v > best_score:
+                    best_score = float(max_v)
+                    best_match = (cx1 + max_l[0], cy1 + max_l[1], sw, sh)
+                    if best_score > 0.60:
+                        break
+            if best_score > 0.60:
+                break
+
+    # Phase 3: Fallback full search jika resolusi sangat unik
     if best_score < threshold:
         scale_search = min(1.0, 1024.0 / float(max(h, w)))
         top_search = cv2.resize(top_img, (0, 0), fx=scale_search, fy=scale_search)
-        scales_full = np.linspace(0.12 * w / float(th_w), 0.85 * w / float(th_w), 16)
+        scales_full = np.linspace(0.12 * short_dim / float(th_w), 0.85 * short_dim / float(th_w), 16)
         for s in scales_full:
             sw = int(round(th_w * s * scale_search))
             sh = int(round(th_h * s * scale_search))
@@ -323,8 +357,8 @@ def generate_watermark_mask(img_bgr, wm_mode='auto', dilation_px=2):
     # =========================================================================
     stamp_bbox = None
     if mode in ['rfans', 'auto']:
-        stamp_mask, stamp_score, stamp_match = detect_stamp_dynamic(img_bgr, threshold=0.34, dilation_px=dilation_px)
-        if stamp_score >= 0.32:
+        stamp_mask, stamp_score, stamp_match = detect_stamp_dynamic(img_bgr, threshold=0.22, dilation_px=dilation_px)
+        if stamp_score >= 0.22:
             mask = cv2.bitwise_or(mask, stamp_mask)
             stamp_bbox = stamp_match
 
